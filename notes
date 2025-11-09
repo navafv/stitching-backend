@@ -1,0 +1,33 @@
+npx openapi-typescript-codegen --input schema.yaml --output src/api
+
+
+
+accounts
+students
+courses
+attendance
+finance
+certificates
+api
+
+
+
+
+manually run the overdue fees check :
+    - python manage.py check_overdue_fees
+
+
+
+
+
+# django
+python manage.py runserver
+
+# redis (ensure running)
+redis-server
+
+# celery worker
+celery -A core worker -l info
+
+# celery beat (scheduler)
+celery -A core beat -l info
