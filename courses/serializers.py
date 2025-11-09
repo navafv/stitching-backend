@@ -8,7 +8,7 @@ Enhancements:
 
 from django.db import transaction
 from rest_framework import serializers
-from .models import Course, Trainer, Batch, Enrollment
+from .models import Course, Trainer, Batch, Enrollment, BatchFeedback
 
 
 class CourseSerializer(serializers.ModelSerializer):
@@ -72,3 +72,36 @@ class EnrollmentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Student already enrolled in this batch.")
 
         return super().create(validated_data)
+
+
+class BatchFeedbackSerializer(serializers.ModelSerializer):
+    student_name = serializers.ReadOnlyField(source="enrollment.student.user.get_full_name")
+    batch_code = serializers.ReadOnlyField(source="enrollment.batch.code")
+
+    class Meta:
+        model = BatchFeedback
+        fields = [
+            "id", "enrollment", "student_name", "batch_code", 
+            "rating", "comments", "submitted_at"
+        ]
+        read_only_fields = ["id", "submitted_at"]
+
+    def validate_enrollment(self, enrollment):
+        """
+        Check if the feedback is from the currently logged-in user.
+        """
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            raise serializers.ValidationError("Authentication required.")
+        
+        if enrollment.student.user != request.user:
+            raise serializers.ValidationError("You can only submit feedback for your own enrollments.")
+        
+        if enrollment.status != "completed":
+            # Optional: only allow feedback on completed courses
+            raise serializers.ValidationError("Feedback can only be submitted for completed batches.")
+            
+        if BatchFeedback.objects.filter(enrollment=enrollment).exists():
+            raise serializers.ValidationError("Feedback has already been submitted for this enrollment.")
+            
+        return enrollment

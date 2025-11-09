@@ -119,3 +119,22 @@ class Enrollment(models.Model):
 
     def __str__(self):
         return f"{self.student.user.get_full_name()} → {self.batch.code}"
+
+
+class BatchFeedback(models.Model):
+    """
+    Stores feedback (rating and comments) from a student
+    about a batch they were enrolled in.
+    """
+    enrollment = models.OneToOneField(Enrollment, on_delete=models.CASCADE, related_name="feedback")
+    rating = models.PositiveIntegerField(validators=[MinValueValidator(1), models.MaxValueValidator(5)])
+    comments = models.TextField(blank=True)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-submitted_at"]
+        verbose_name = "Batch Feedback"
+        verbose_name_plural = "Batch Feedback"
+
+    def __str__(self):
+        return f"Feedback for {self.enrollment.batch.code} by {self.enrollment.student.user.get_full_name()}"

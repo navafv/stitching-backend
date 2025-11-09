@@ -85,3 +85,29 @@ class Student(models.Model):
         count = Student.objects.count() + 1
         year = timezone.now().year
         return f"STU{year}-{count:03d}"
+
+
+class StudentMeasurement(models.Model):
+    """
+    Stores body measurements for a student, taken on a specific date.
+    """
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="measurements")
+    date_taken = models.DateField(default=timezone.localdate)
+    
+    # Example measurements (add as many as you need)
+    neck = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    chest = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    waist = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    hips = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    sleeve_length = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    inseam = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
+    
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-date_taken"]
+        verbose_name = "Student Measurement"
+        verbose_name_plural = "Student Measurements"
+
+    def __str__(self):
+        return f"Measurements for {self.student.user.get_full_name()} on {self.date_taken}"

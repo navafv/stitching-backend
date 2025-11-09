@@ -9,9 +9,9 @@ Enhancements:
 
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
-from .models import Course, Trainer, Batch, Enrollment
-from .serializers import CourseSerializer, TrainerSerializer, BatchSerializer, EnrollmentSerializer
-from api.permissions import IsAdminOrReadOnly, IsStaffOrReadOnly
+from .models import Course, Trainer, Batch, Enrollment, BatchFeedback
+from .serializers import CourseSerializer, TrainerSerializer, BatchSerializer, EnrollmentSerializer, BatchFeedbackSerializer
+from api.permissions import IsAdminOrReadOnly, IsStaffOrReadOnly, IsEnrolledStudentOrReadOnly
 
 
 class CourseViewSet(viewsets.ModelViewSet):
@@ -52,3 +52,28 @@ class EnrollmentViewSet(viewsets.ModelViewSet):
     filterset_fields = ["status", "batch", "student"]
     search_fields = ["student__user__first_name", "student__user__last_name", "batch__code"]
     ordering_fields = ["enrolled_on", "status"]
+
+
+class BatchFeedbackViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint for students to submit feedback for batches.
+    - Students can create/update their *own* feedback.
+    - Staff can read all feedback.
+    """
+    queryset = BatchFeedback.objects.select_related(
+        "enrollment__student__user", "enrollment__batch"
+    )
+    serializer_class = BatchFeedbackSerializer
+    permission_classes = [IsEnrolledStudentOrReadOnly]
+
+    def get_queryset(self):
+        """
+        Students can only list their own feedback.
+        Staff can list all feedback.
+        """
+        user = self.request.user
+        if not user.is_authenticated:
+            return self.queryset.none()
+        if user.is_staff:
+            return self.queryset.all()
+        return self.queryset.filter(enrollment__student__user=user)

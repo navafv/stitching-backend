@@ -29,3 +29,23 @@ class IsSelfOrAdmin(permissions.BasePermission):
     """
     def has_object_permission(self, request, view, obj):
         return obj == request.user or (request.user and request.user.is_staff)
+
+
+
+class IsEnrolledStudentOrReadOnly(permissions.BasePermission):
+    """
+    Allows read-only access to staff, but write access only to the
+    student associated with the enrollment.
+    """
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS:
+            return bool(request.user and request.user.is_staff)
+        # Allow POST if authenticated
+        return request.user and request.user.is_authenticated
+
+    def has_object_permission(self, request, view, obj):
+        # Read-only for staff
+        if request.method in permissions.SAFE_METHODS:
+            return bool(request.user and request.user.is_staff)
+        # Write permissions only for the student who owns the enrollment
+        return obj.enrollment.student.user == request.user

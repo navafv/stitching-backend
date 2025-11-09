@@ -9,8 +9,8 @@ Enhancements:
 
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
-from .models import Enquiry, Student
-from .serializers import EnquirySerializer, StudentSerializer
+from .models import Enquiry, Student, StudentMeasurement
+from .serializers import EnquirySerializer, StudentSerializer, StudentMeasurementSerializer
 from api.permissions import IsStaffOrReadOnly
 
 
@@ -38,3 +38,22 @@ class StudentViewSet(viewsets.ModelViewSet):
         "guardian_phone",
     ]
     ordering_fields = ["admission_date", "reg_no", "id"]
+
+
+class StudentMeasurementViewSet(viewsets.ModelViewSet):
+    """
+    API endpoint for managing a student's measurements.
+    Accessed via /api/v1/students/<student_id>/measurements/
+    """
+    queryset = StudentMeasurement.objects.all()
+    serializer_class = StudentMeasurementSerializer
+    permission_classes = [IsStaffOrReadOnly]
+
+    def get_queryset(self):
+        """Filter measurements by the student ID in the URL."""
+        return self.queryset.filter(student_id=self.kwargs.get("student_pk"))
+
+    def perform_create(self, serializer):
+        """Automatically associate measurements with the student from the URL."""
+        student = Student.objects.get(pk=self.kwargs.get("student_pk"))
+        serializer.save(student=student)

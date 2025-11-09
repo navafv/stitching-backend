@@ -12,8 +12,8 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from api.permissions import IsStaffOrReadOnly
-from .models import FeesReceipt, Expense, Payroll
-from .serializers import FeesReceiptSerializer, ExpenseSerializer, PayrollSerializer
+from .models import FeesReceipt, Expense, Payroll, StockItem, StockTransaction
+from .serializers import FeesReceiptSerializer, ExpenseSerializer, PayrollSerializer, StockItemSerializer, StockTransactionSerializer
 
 
 class FeesReceiptViewSet(viewsets.ModelViewSet):
@@ -67,3 +67,34 @@ class PayrollViewSet(viewsets.ModelViewSet):
     filterset_fields = ["month", "status", "trainer"]
     search_fields = ["trainer__user__first_name", "trainer__user__last_name", "trainer__emp_no"]
     ordering_fields = ["month", "net_pay"]
+
+
+class StockItemViewSet(viewsets.ModelViewSet):
+    """
+    Manage Inventory Stock Items. Quantity is read-only and updated by Transactions.
+    """
+    queryset = StockItem.objects.all()
+    serializer_class = StockItemSerializer
+    permission_classes = [IsStaffOrReadOnly]
+    search_fields = ["name", "description"]
+    filterset_fields = ["unit_of_measure"]
+    
+    @action(detail=True, methods=["get"])
+    def transactions(self, request, pk=None):
+        """Get all transactions for a specific stock item."""
+        item = self.get_object()
+        transactions = item.transactions.all()
+        page = self.paginate_queryset(transactions)
+        serializer = StockTransactionSerializer(page, many=True, context={'request': request})
+        return self.get_paginated_response(serializer.data)
+
+
+class StockTransactionViewSet(viewsets.ModelViewSet):
+    """
+    Create transactions to add/remove stock.
+    This will automatically update the quantity_on_hand of the StockItem.
+    """
+    queryset = StockTransaction.objects.select_related("item", "user")
+    serializer_class = StockTransactionSerializer
+    permission_classes = [IsStaffOrReadOnly]
+    filterset_fields = ["item", "user"]

@@ -9,7 +9,7 @@ Enhancements:
 
 from django.db import transaction
 from rest_framework import serializers
-from .models import Enquiry, Student
+from .models import Enquiry, Student, StudentMeasurement
 from accounts.serializers import UserSerializer, UserCreateSerializer
 from accounts.models import User
 from django.utils import timezone
@@ -69,3 +69,13 @@ class StudentSerializer(serializers.ModelSerializer):
         """Prevent nested user updates."""
         validated_data.pop("user_payload", None)
         return super().update(instance, validated_data)
+
+
+class StudentMeasurementSerializer(serializers.ModelSerializer):
+    """Serializer for student measurements."""
+    student_name = serializers.ReadOnlyField(source="student.user.get_full_name")
+
+    class Meta:
+        model = StudentMeasurement
+        fields = "__all__"
+        read_only_fields = ["id", "student"]

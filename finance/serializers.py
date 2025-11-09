@@ -9,7 +9,7 @@ Enhancements:
 
 from django.db import transaction
 from rest_framework import serializers
-from .models import FeesReceipt, Expense, Payroll
+from .models import FeesReceipt, Expense, Payroll, StockItem, StockTransaction
 from courses.models import Enrollment
 
 
@@ -117,3 +117,25 @@ class PayrollSerializer(serializers.ModelSerializer):
             # if round(float(net_pay), 2) != expected:
             #     raise serializers.ValidationError("net_pay must equal sum(earnings) - sum(deductions).")
         return attrs
+
+
+class StockItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StockItem
+        fields = "__all__"
+        read_only_fields = ["id", "quantity_on_hand"]
+
+class StockTransactionSerializer(serializers.ModelSerializer):
+    item_name = serializers.ReadOnlyField(source="item.name")
+    
+    class Meta:
+        model = StockTransaction
+        fields = "__all__"
+        read_only_fields = ["id", "date", "user"]
+
+    def create(self, validated_data):
+        """Assign user on creation."""
+        request = self.context.get("request")
+        if request and request.user and request.user.is_authenticated:
+            validated_data["user"] = request.user
+        return super().create(validated_data)

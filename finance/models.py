@@ -142,3 +142,65 @@ class Reminder(models.Model):
 
     def __str__(self):
         return f"Reminder to {self.student} ({self.status})"
+
+
+
+class StockItem(models.Model):
+    """
+    Represents an item in the inventory, like fabric, thread, buttons.
+    """
+    name = models.CharField(max_length=150, unique=True)
+    description = models.TextField(blank=True)
+    unit_of_measure = models.CharField(max_length=20, help_text="e.g., 'meters', 'pieces', 'kg'")
+    quantity_on_hand = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    reorder_level = models.DecimalField(max_digits=10, decimal_places=2, default=0,
+                                        help_text="Quantity at which to re-order")
+    
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Stock Item"
+        verbose_name_plural = "Stock Items"
+
+    def __str__(self):
+        return f"{self.name} ({self.quantity_on_hand} {self.unit_of_measure})"
+    
+    @property
+    def needs_reorder(self):
+        return self.quantity_on_hand <= self.reorder_level
+
+class StockTransaction(models.Model):
+    """
+    Logs every change in stock quantity (e.g., purchase, usage, wastage).
+    """
+    item = models.ForeignKey(StockItem, on_delete=models.CASCADE, related_name="transactions")
+    date = models.DateTimeField(auto_now_add=True)
+    quantity_changed = models.DecimalField(max_digits=10, decimal_places=2, 
+                                           help_text="Positive for adding stock (e.g., purchase), negative for removing (e.g., usage)")
+    reason = models.CharField(max_length=255, blank=True, help_text="e.g., 'Purchase Order 123', 'Used for Batch BT-01', 'Wastage'")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        ordering = ["-date"]
+        verbose_name = "Stock Transaction"
+        verbose_name_plural = "Stock Transactions"
+
+    def __str__(self):
+        return f"{self.item.name}: {self.quantity_changed:+} on {self.date.date()}"
+
+    def save(self, *args, **kwargs):
+        """
+        Automatically update the StockItem's quantity_on_hand.
+        """
+        # On create, update the parent item's stock level
+        if not self.pk:
+            self.item.quantity_on_hand = (self.item.quantity_on_hand or 0) + self.quantity_changed
+            self.item.save(update_fields=["quantity_on_hand"])
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        """
+        On delete, reverse the quantity change (e.g., if a transaction was a mistake).
+        """
+        self.item.quantity_on_hand = (self.item.quantity_on_hand or 0) - self.quantity_changed
+        self.item.save(update_fields=["quantity_on_hand"])
+        super().delete(*args, **kwargs)

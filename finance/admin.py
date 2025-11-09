@@ -9,7 +9,7 @@ Enhancements:
 
 from django.contrib import admin
 from django.contrib import messages
-from .models import FeesReceipt, Expense, Payroll, Reminder
+from .models import FeesReceipt, Expense, Payroll, Reminder, StockItem, StockTransaction
 
 
 @admin.register(FeesReceipt)
@@ -72,3 +72,17 @@ class ReminderAdmin(admin.ModelAdmin):
     list_filter = ("status", "sent_at")
     search_fields = ("student__user__first_name", "student__user__last_name", "message")
     readonly_fields = ("sent_at", "sent_by")
+
+
+class StockTransactionInline(admin.TabularInline):
+    model = StockTransaction
+    extra = 0
+    readonly_fields = ("date", "user")
+    
+@admin.register(StockItem)
+class StockItemAdmin(admin.ModelAdmin):
+    list_display = ("name", "quantity_on_hand", "unit_of_measure", "reorder_level", "needs_reorder")
+    list_filter = ("unit_of_measure",)
+    search_fields = ("name", "description")
+    inlines = [StockTransactionInline]
+    readonly_fields = ("quantity_on_hand",) # Quantity is managed by transactions

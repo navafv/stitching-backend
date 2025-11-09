@@ -7,7 +7,14 @@ Enhancements:
 """
 
 from django.contrib import admin
-from .models import Enquiry, Student
+from .models import Enquiry, Student, StudentMeasurement
+
+
+class StudentMeasurementInline(admin.TabularInline):
+    """Allows editing measurements inline from the Student admin page."""
+    model = StudentMeasurement
+    extra = 1
+    ordering = ("-date_taken",)
 
 
 @admin.register(Enquiry)
@@ -32,3 +39,4 @@ class StudentAdmin(admin.ModelAdmin):
     )
     readonly_fields = ("reg_no",)
     ordering = ("-admission_date",)
+    inlines = [StudentMeasurementInline]

@@ -6,9 +6,9 @@ from .views import health_check
 
 # Import all viewsets
 from accounts.views import RoleViewSet, UserViewSet
-from students.views import EnquiryViewSet, StudentViewSet
-from courses.views import CourseViewSet, TrainerViewSet, BatchViewSet, EnrollmentViewSet
-from finance.views import FeesReceiptViewSet, ExpenseViewSet, PayrollViewSet
+from students.views import EnquiryViewSet, StudentViewSet, StudentMeasurementViewSet
+from courses.views import CourseViewSet, TrainerViewSet, BatchViewSet, EnrollmentViewSet, BatchFeedbackViewSet
+from finance.views import FeesReceiptViewSet, ExpenseViewSet, PayrollViewSet, StockItemViewSet, StockTransactionViewSet
 from finance.views_analytics import FinanceAnalyticsViewSet
 from finance.views_outstanding import OutstandingFeesViewSet
 from attendance.views import AttendanceViewSet
@@ -21,10 +21,12 @@ router.register("roles", RoleViewSet)
 router.register("users", UserViewSet)
 router.register("enquiries", EnquiryViewSet)
 router.register("students", StudentViewSet)
+router.register("measurements", StudentMeasurementViewSet, basename="measurement")
 router.register("courses", CourseViewSet)
 router.register("trainers", TrainerViewSet)
 router.register("batches", BatchViewSet)
 router.register("enrollments", EnrollmentViewSet)
+router.register("feedback", BatchFeedbackViewSet, basename="feedback")
 router.register("fees/receipts", FeesReceiptViewSet)
 router.register("expenses", ExpenseViewSet)
 router.register("payroll", PayrollViewSet)
@@ -32,6 +34,8 @@ router.register("attendance", AttendanceViewSet)
 router.register("certificates", CertificateViewSet)
 router.register("finance/analytics", FinanceAnalyticsViewSet, basename="finance-analytics")
 router.register("finance/outstanding", OutstandingFeesViewSet, basename="finance-outstanding")
+router.register("stock-items", StockItemViewSet, basename="stock-item")
+router.register("stock-transactions", StockTransactionViewSet, basename="stock-transaction")
 router.register("notifications", NotificationViewSet, basename="notification")
 
 # Main API patterns

@@ -27,6 +27,10 @@ class Role(models.Model):
 
     def __str__(self) -> str:
         return self.name
+    
+    def get_user_ids(self):
+        """Helper to get all user IDs associated with this role."""
+        return list(self.user_set.values_list('id', flat=True))
 
 
 class User(AbstractUser):
