@@ -8,7 +8,7 @@ Enhancements:
 """
 
 from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAdminUser
 from .models import Enquiry, Student, StudentMeasurement
 from .serializers import EnquirySerializer, StudentSerializer, StudentMeasurementSerializer
 from api.permissions import IsStaffOrReadOnly
@@ -18,10 +18,23 @@ class EnquiryViewSet(viewsets.ModelViewSet):
     """Handles public/student enquiries."""
     queryset = Enquiry.objects.all().order_by("-created_at")
     serializer_class = EnquirySerializer
-    permission_classes = [IsAuthenticated]  # or IsStaffOrReadOnly if needed
     filterset_fields = ["status", "course_interest"]
     search_fields = ["name", "phone", "email", "notes"]
     ordering_fields = ["created_at", "name"]
+
+    def get_permissions(self):
+        """
+        Allow public 'create' (POST) for the form.
+        Require staff/admin for all other actions.
+        """
+        if self.action == 'create':
+            # Anyone can POST to create a new enquiry
+            self.permission_classes = [AllowAny]
+        else:
+            # Only staff/admin can list, view, update, or delete enquiries
+            self.permission_classes = [IsAdminUser] 
+            # Note: IsAdminUser in DRF checks if user.is_staff == True
+        return super().get_permissions()
 
 
 class StudentViewSet(viewsets.ModelViewSet):
