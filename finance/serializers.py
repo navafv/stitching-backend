@@ -14,10 +14,16 @@ from courses.models import Enrollment
 
 
 class FeesReceiptSerializer(serializers.ModelSerializer):
+    # Add a ReadOnlyField to get the student's name
+    student_name = serializers.ReadOnlyField(source="student.user.get_full_name")
+
     class Meta:
         model = FeesReceipt
-        fields = "__all__"
-        read_only_fields = ["date", "posted_by", "locked"]
+        fields = [
+            "id", "receipt_no", "student", "student_name", "course", "batch",
+            "amount", "mode", "txn_id", "date", "posted_by", "locked"
+        ]
+        read_only_fields = ["date", "posted_by", "locked", "student_name"]
 
     def validate(self, attrs):
         # Prevent edits if locked
