@@ -30,7 +30,14 @@ class Certificate(models.Model):
     def save(self, *args, **kwargs):
         # Auto-generate certificate_no if not provided
         if not self.certificate_no:
-            today = timezone.now().strftime("%Y%m%d")
-            count = Certificate.objects.filter(issue_date__date=timezone.now().date()).count() + 1
-            self.certificate_no = f"CERT-{today}-{count:04d}"
+            
+            # --- FIX: Changed how today's date is fetched and filtered ---
+            today = timezone.now().date() # Get the date object
+            today_str = today.strftime("%Y%m%d") # Get the string for the number
+            
+            # Filter for certificates issued today
+            count = Certificate.objects.filter(issue_date=today).count() + 1 
+            # --- END FIX ---
+            
+            self.certificate_no = f"CERT-{today_str}-{count:04d}"
         super().save(*args, **kwargs)
