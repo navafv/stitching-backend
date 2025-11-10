@@ -1,3 +1,7 @@
+"""
+UPDATED FILE: stitching-backend/api/permissions.py
+Added IsAdmin, IsTeacher, and IsStudent permissions for granular access.
+"""
 from rest_framework import permissions
 
 class IsAdminOrReadOnly(permissions.BasePermission):
@@ -8,8 +12,7 @@ class IsAdminOrReadOnly(permissions.BasePermission):
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
             return True
-        return bool(request.user and request.user.is_staff)
-
+        return bool(request.user and request.user.is_superuser) # CHANGED: from is_staff
 
 class IsStaffOrReadOnly(permissions.BasePermission):
     """
@@ -28,8 +31,13 @@ class IsSelfOrAdmin(permissions.BasePermission):
     Use this for profile or user-specific endpoints.
     """
     def has_object_permission(self, request, view, obj):
-        return obj == request.user or (request.user and request.user.is_staff)
-
+        # Handle case where obj is User
+        if hasattr(obj, 'is_superuser'):
+            return obj == request.user or (request.user and request.user.is_superuser)
+        # Handle case where obj is owned by a user
+        if hasattr(obj, 'user'):
+            return obj.user == request.user or (request.user and request.user.is_superuser)
+        return False
 
 
 class IsEnrolledStudentOrReadOnly(permissions.BasePermission):
@@ -49,3 +57,20 @@ class IsEnrolledStudentOrReadOnly(permissions.BasePermission):
             return bool(request.user and request.user.is_staff)
         # Write permissions only for the student who owns the enrollment
         return obj.enrollment.student.user == request.user
+
+# --- NEW PERMISSIONS ---
+
+class IsAdmin(permissions.BasePermission):
+    """Allows access only to Admin users (Superusers)."""
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and request.user.is_superuser)
+
+class IsTeacher(permissions.BasePermission):
+    """Allows access only to Teachers (Staff but not Superuser)."""
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_staff and not request.user.is_superuser)
+
+class IsStudent(permissions.BasePermission):
+    """Allows access only to Students (Not Staff)."""
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and not request.user.is_staff)

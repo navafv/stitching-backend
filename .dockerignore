@@ -1,0 +1,19 @@
+#
+# NEW FILE: stitching-backend/.dockerignore
+#
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+.venv
+env/
+venv/
+ENV/
+db.sqlite3
+db.sqlite3-journal
+.git
+.gitignore
+media/
+staticfiles/

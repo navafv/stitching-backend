@@ -1,11 +1,9 @@
 """
-Accounts Serializers
---------------------
-Enhancements:
-- Added password validation.
-- Explicit read/write separation.
-- Safe user creation (hashed password).
-- Write-only password field.
+UPDATED FILE: stitching-backend/accounts/serializers.py
+
+CRITICAL FIX: Added `is_superuser` to the UserSerializer.
+This is essential for the frontend to distinguish
+between an Admin (superuser) and a Teacher (staff).
 """
 
 from django.contrib.auth.password_validation import validate_password
@@ -34,10 +32,10 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             "id", "username", "email", "first_name", "last_name",
-            "phone", "address", "role", "role_id", "is_active", "is_staff",
-            "student_id",
+            "phone", "address", "role", "role_id", "is_active", 
+            "is_staff", "is_superuser", "student_id", # <-- ADDED `is_superuser`
         ]
-        read_only_fields = ["id", "is_staff"]
+        read_only_fields = ["id", "is_staff", "is_superuser"] # <-- ADDED `is_superuser`
 
     def update(self, instance, validated_data):
         """Prevent accidental password overwrite during update."""
