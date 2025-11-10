@@ -3,6 +3,9 @@ Finance Outstanding Views
 -------------------------
 Tracks unpaid balances for students and batches
 based on FeesReceipt and Course total fees.
+
+FIX: Changed all @action decorators to detail=False to match
+frontend API calls and fix 404 errors.
 """
 
 from django.db.models import Sum, F
@@ -28,7 +31,7 @@ class OutstandingFeesViewSet(viewsets.ViewSet):
     # ------------------------------------------------------------
     # 1️⃣ Student outstanding summary
     # ------------------------------------------------------------
-    @action(detail=True, methods=["get"], url_path="student/(?P<student_id>[^/.]+)")
+    @action(detail=False, methods=["get"], url_path="student/(?P<student_id>[^/.]+)")
     def student_outstanding(self, request, student_id=None):
         """Returns how much a student has paid and owes."""
         student = Student.objects.filter(id=student_id).select_related("user").first()
@@ -37,7 +40,14 @@ class OutstandingFeesViewSet(viewsets.ViewSet):
 
         enrollments = Enrollment.objects.select_related("batch__course").filter(student=student)
         if not enrollments.exists():
-            return Response({"detail": "Student has no course enrollments."}, status=404)
+            # Return empty data instead of 404, as this is valid
+            return Response({
+                "student": student.user.get_full_name(),
+                "reg_no": student.reg_no,
+                "courses": [],
+                "total_paid": 0,
+                "total_due": 0,
+            })
 
         receipts = (
             FeesReceipt.objects.filter(student=student)
@@ -75,7 +85,7 @@ class OutstandingFeesViewSet(viewsets.ViewSet):
     # ------------------------------------------------------------
     # 2️⃣ Batch-level outstanding summary
     # ------------------------------------------------------------
-    @action(detail=True, methods=["get"], url_path="batch/(?P<batch_id>[^/.]+)")
+    @action(detail=False, methods=["get"], url_path="batch/(?P<batch_id>[^/.]+)")
     def batch_outstanding(self, request, batch_id=None):
         """Returns outstanding fees summary for a batch."""
         batch = Batch.objects.filter(id=batch_id).select_related("course").first()
@@ -120,7 +130,7 @@ class OutstandingFeesViewSet(viewsets.ViewSet):
     # ------------------------------------------------------------
     # 3️⃣ Course-level outstanding summary
     # ------------------------------------------------------------
-    @action(detail=True, methods=["get"], url_path="course/(?P<course_id>[^/.]+)")
+    @action(detail=False, methods=["get"], url_path="course/(?P<course_id>[^/.]+)")
     def course_outstanding(self, request, course_id=None):
         """Returns overall outstanding summary for a course."""
         course = Course.objects.filter(id=course_id).first()

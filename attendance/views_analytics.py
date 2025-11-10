@@ -25,7 +25,7 @@ class AttendanceAnalyticsViewSet(viewsets.ViewSet):
     # --------------------------------------------------------
     # 1. Batch summary — per student stats
     # --------------------------------------------------------
-    @action(detail=True, methods=["get"], url_path="batch/(?P<batch_id>[^/.]+)")
+    @action(detail=False, methods=["get"], url_path="batch/(?P<batch_id>[^/.]+)")
     def batch_summary(self, request, batch_id=None):
         """Returns batch-level attendance summary for all students."""
         batch = Batch.objects.filter(id=batch_id).first()
@@ -60,7 +60,7 @@ class AttendanceAnalyticsViewSet(viewsets.ViewSet):
     # --------------------------------------------------------
     # 2. Student summary — per batch
     # --------------------------------------------------------
-    @action(detail=True, methods=["get"], url_path="student/(?P<student_id>[^/.]+)")
+    @action(detail=False, methods=["get"], url_path="student/(?P<student_id>[^/.]+)")
     def student_summary(self, request, student_id=None):
         """Returns student-level attendance summary across batches."""
         student = Student.objects.filter(id=student_id).first()
@@ -92,7 +92,7 @@ class AttendanceAnalyticsViewSet(viewsets.ViewSet):
     # --------------------------------------------------------
     # 3. Batch timeline (for charts)
     # --------------------------------------------------------
-    @action(detail=True, methods=["get"], url_path="batch/(?P<batch_id>[^/.]+)/timeline")
+    @action(detail=False, methods=["get"], url_path="batch/(?P<batch_id>[^/.]+)/timeline")
     def batch_timeline(self, request, batch_id=None):
         """Returns attendance % over time for a batch (chart data)."""
         batch = Batch.objects.filter(id=batch_id).first()

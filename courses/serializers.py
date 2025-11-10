@@ -4,6 +4,7 @@ Courses Serializers
 Enhancements:
 - Added validation and nested display fields.
 - Added atomic enrollment creation with capacity checks.
+- Added 'has_feedback' field to EnrollmentSerializer.
 """
 
 from django.db import transaction
@@ -51,11 +52,22 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     """Serializer for Enrollment model with validation."""
     student_name = serializers.ReadOnlyField(source="student.user.get_full_name")
     batch_code = serializers.ReadOnlyField(source="batch.code")
+    course_title = serializers.ReadOnlyField(source="batch.course.title")
+    has_feedback = serializers.SerializerMethodField()
+    course_id = serializers.ReadOnlyField(source="batch.course.id") # <-- **ADD THIS LINE**
 
     class Meta:
         model = Enrollment
-        fields = ["id", "student", "student_name", "batch", "batch_code", "enrolled_on", "status"]
+        fields = [
+            "id", "student", "student_name", "batch", "batch_code", 
+            "enrolled_on", "status", "course_title", "has_feedback",
+            "course_id"  # <-- **ADD THIS FIELD**
+        ]
         read_only_fields = ["id", "enrolled_on"]
+
+    def get_has_feedback(self, obj):
+        # Check if the one-to-one reverse relation exists
+        return hasattr(obj, 'feedback')
 
     @transaction.atomic
     def create(self, validated_data):

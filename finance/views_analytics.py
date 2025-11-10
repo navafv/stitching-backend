@@ -65,25 +65,31 @@ class FinanceAnalyticsViewSet(viewsets.ViewSet):
             .annotate(total_expense=Sum("amount"))
             .order_by("month")
         )
+        
+        # --- FIX: Simplified the payroll query ---
         payroll = (
             Payroll.objects
-            .annotate(month=F("month"))  # already YYYY-MM
             .values("month")
             .annotate(total_payroll=Sum("net_pay"))
+            .order_by("month")
         )
+        # --- END FIX ---
 
         # merge all month data into one timeline
         result = {}
         for rec in income:
+            if not rec["month"]: continue # Skip any null dates
             key = rec["month"].strftime("%Y-%m")
             result.setdefault(key, {"month": key, "income": 0, "expense": 0, "payroll": 0})
             result[key]["income"] = float(rec["total_income"] or 0)
         for rec in expense:
+            if not rec["month"]: continue # Skip any null dates
             key = rec["month"].strftime("%Y-%m")
             result.setdefault(key, {"month": key, "income": 0, "expense": 0, "payroll": 0})
             result[key]["expense"] = float(rec["total_expense"] or 0)
         for rec in payroll:
-            key = rec["month"]
+            if not rec["month"]: continue # Skip any null months
+            key = rec["month"] # This is already a 'YYYY-MM' string
             result.setdefault(key, {"month": key, "income": 0, "expense": 0, "payroll": 0})
             result[key]["payroll"] = float(rec["total_payroll"] or 0)
 
