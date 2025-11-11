@@ -1,28 +1,177 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Certificate</title>
-  <style>
-    body { font-family: 'Poppins', sans-serif; text-align: center; padding: 40px; }
-    h1 { font-size: 36px; color: #2b2b2b; }
-    .details { margin-top: 40px; font-size: 20px; }
-    .footer { margin-top: 80px; font-size: 14px; color: gray; }
-  </style>
+    <meta charset="utf-8">
+    <title>Certificate of Completion</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Great+Vibes&family=Playfair+Display:wght@700&family=Poppins:wght@300;400;500&display=swap');
+
+        @page {
+            size: A4 landscape;
+            margin: 0;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Poppins', sans-serif;
+            background: radial-gradient(circle at center, #ffffff 0%, #f7f8fb 100%);
+            color: #333;
+            position: relative;
+        }
+
+        /* Elegant Gold Frame */
+        .certificate-container {
+            width: 297mm;
+            height: 210mm;
+            box-sizing: border-box;
+            padding: 25mm;
+            border: 10px solid #c0a15f;
+            background: linear-gradient(145deg, rgba(255,255,255,0.9), rgba(255,255,255,0.97));
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            position: relative;
+        }
+
+        /* Watermark decorative pattern */
+        .certificate-container::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background-image: url('https://www.transparenttextures.com/patterns/gplay.png');
+            opacity: 0.1;
+            z-index: 0;
+        }
+
+        .content {
+            z-index: 1;
+            max-width: 220mm;
+        }
+
+        .institute-name {
+            font-family: 'Great Vibes', cursive;
+            font-size: 58px;
+            color: #1a3a69;
+            margin-bottom: 5px;
+        }
+
+        .divider {
+            width: 120px;
+            height: 3px;
+            background-color: #c0a15f;
+            margin: 10px auto 20px auto;
+        }
+
+        .header {
+            font-family: 'Playfair Display', serif;
+            font-size: 42px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            color: #1a3a69;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 16px;
+            font-weight: 400;
+            color: #555;
+            margin-bottom: 15px;
+        }
+
+        .student-name {
+            font-family: 'Great Vibes', cursive;
+            font-size: 70px;
+            color: #c0a15f;
+            margin: 10px 0 5px 0;
+        }
+
+        .course-description {
+            font-size: 16px;
+            color: #444;
+            font-weight: 300;
+            line-height: 1.7;
+            margin-top: 15px;
+        }
+
+        .course-name {
+            font-weight: 500;
+            color: #1a3a69;
+        }
+
+        .signatures {
+            margin-top: 50px;
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+        }
+
+        .signature {
+            width: 40%;
+            text-align: center;
+        }
+
+        .signature-line {
+            border-top: 1.5px solid #777;
+            margin-top: 40px;
+            padding-top: 5px;
+            font-weight: 500;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .footer-info {
+            position: absolute;
+            bottom: 12mm;
+            width: 100%;
+            text-align: center;
+            font-size: 10px;
+            color: #777;
+        }
+
+        .verify-link {
+            color: #555;
+            text-decoration: none;
+            font-weight: 400;
+        }
+    </style>
 </head>
 <body>
-  <h1>Certificate of Completion</h1>
-  <p>This is to certify that</p>
-  <h2>{{ certificate.student.user.get_full_name }}</h2>
-  <p>has successfully completed the course</p>
-  <h3>{{ certificate.course.title }}</h3>
-  <div class="details">
-    Certificate No: {{ certificate.certificate_no }}<br>
-    Issue Date: {{ certificate.issue_date }}<br>
-    QR Code: {{ certificate.qr_hash }}
-  </div>
-  <div class="footer">
-    © Stitching Institute - Verified via QR
-  </div>
+    <div class="certificate-container">
+        <div class="content">
+            <h1 class="institute-name">Noor Stitching Institute</h1>
+            <div class="divider"></div>
+
+            <h2 class="header">Certificate of Completion</h2>
+            <p class="subtitle">This is proudly presented to</p>
+
+            <h3 class="student-name">{{ certificate.student.user.get_full_name }}</h3>
+
+            <p class="course-description">
+                in recognition of the successful completion of the 
+                <span class="course-name">{{ duration_text }} {{ certificate.course.title }}</span> 
+                program.  
+                Through dedication and creative skill, {{ certificate.student.user.first_name }} has demonstrated outstanding proficiency 
+                and commitment in the art of stitching and garment design.
+            </p>
+
+            <div class="signatures">
+                <div class="signature">
+                    <div class="signature-line">Authorized Signatory</div>
+                </div>
+                <div class="signature">
+                    <div class="signature-line">Director</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer-info">
+            Certificate No: {{ certificate.certificate_no }} | Issued on: {{ certificate.issue_date|date:"F d, Y" }} | 
+            Verify at: <a href="{{ verify_url }}" class="verify-link">{{ verify_url }}</a>
+        </div>
+    </div>
 </body>
 </html>

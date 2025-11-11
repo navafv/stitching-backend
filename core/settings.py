@@ -53,7 +53,6 @@ INSTALLED_APPS = [
     "django_filters",
     "drf_spectacular",
     "drf_spectacular_sidecar",
-    "django_celery_beat",
     "simple_history",
 ]
 
@@ -189,19 +188,6 @@ CORS_ALLOW_CREDENTIALS = True
 
 CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://192.168.1.2:5173").split(",")
 
-
-# ------------------------------------------------------------------------------
-# Celery & Redis
-# ------------------------------------------------------------------------------
-# Use REDIS_URL from env for production
-REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379")
-CELERY_BROKER_URL = f"{REDIS_URL}/0"
-CELERY_RESULT_BACKEND = f"{REDIS_URL}/0"
-CELERY_ACCEPT_CONTENT = ["json"]
-CELERY_TASK_SERIALIZER = "json"
-CELERY_RESULT_SERIALIZER = "json"
-CELERY_TIMEZONE = "Asia/Kolkata"
-CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
 # ------------------------------------------------------------------------------
 # drf-spectacular (OpenAPI)
