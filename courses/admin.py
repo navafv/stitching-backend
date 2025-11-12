@@ -29,16 +29,16 @@ class TrainerAdmin(admin.ModelAdmin):
 
 @admin.register(Batch)
 class BatchAdmin(admin.ModelAdmin):
-    list_display = ("code", "course", "trainer", "start_date", "end_date", "capacity")
-    list_filter = ("course", "trainer", "start_date")
+    list_display = ("code", "course", "trainer", "capacity", "schedule")
+    list_filter = ("course", "trainer")
     search_fields = ("code", "course__title", "trainer__user__first_name")
-    ordering = ("-start_date",)
+    ordering = ("code",)
 
 
 @admin.register(Enrollment)
 class EnrollmentAdmin(admin.ModelAdmin):
-    list_display = ("student", "batch", "enrolled_on", "status")
+    list_display = ("student", "batch", "enrolled_on", "completion_date", "status")
     list_filter = ("status", "batch__course")
     search_fields = ("student__user__first_name", "batch__code")
-    readonly_fields = ("enrolled_on",)
+    readonly_fields = ("enrolled_on", "completion_date")
     ordering = ("-enrolled_on",)

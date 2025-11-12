@@ -9,20 +9,23 @@ Enhancements:
 
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAdminUser, IsAuthenticated
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from .models import Role, User
 from .serializers import (
     RoleSerializer, UserSerializer, UserCreateSerializer, 
     PasswordChangeSerializer, HistoricalUserSerializer
 )
+from api.permissions import IsAdmin
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 
 class RoleViewSet(viewsets.ModelViewSet):
     """Admin-only Role management."""
     queryset = Role.objects.all().order_by("name")
     serializer_class = RoleSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdmin]
+    authentication_classes = [JWTAuthentication]
     filterset_fields = ["name"]
     search_fields = ["name"]
     ordering_fields = ["name", "id"]
@@ -38,11 +41,12 @@ class UserViewSet(viewsets.ModelViewSet):
     filterset_fields = ["is_active", "role"]
     search_fields = ["username", "email", "first_name", "last_name", "phone"]
     ordering_fields = ["id", "username", "first_name", "last_name"]
+    authentication_classes = [JWTAuthentication]
 
     def get_permissions(self):
         if self.action in ["me", "partial_update", "set_password"]:
             return [IsAuthenticated()]
-        return [IsAdminUser()]
+        return [IsAdmin()]
 
     def get_serializer_class(self):
         if self.action == "create":
@@ -75,6 +79,7 @@ class HistoricalUserViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = User.history.select_related("history_user").all()
     serializer_class = HistoricalUserSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdmin]
+    authentication_classes = [JWTAuthentication]
     filterset_fields = ["history_type", "history_user", "username"]
     search_fields = ["username", "first_name", "history_change_reason"]

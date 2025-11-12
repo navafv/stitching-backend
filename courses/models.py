@@ -14,6 +14,8 @@ from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 from students.models import Student
+from django.utils import timezone
+from datetime import timedelta
 
 
 class Course(models.Model):
@@ -64,22 +66,19 @@ class Trainer(models.Model):
 
 class Batch(models.Model):
     """
-    Represents a training batch for a specific course and trainer.
-    A batch can have multiple enrolled students.
+    Represents a training "group" or "session" for a specific course.
+    Students can be enrolled in this group at any time.
     """
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="batches")
     trainer = models.ForeignKey(Trainer, on_delete=models.SET_NULL, null=True, blank=True)
     code = models.CharField(max_length=20, unique=True)
-    start_date = models.DateField()
-    end_date = models.DateField()
     capacity = models.PositiveIntegerField(default=10, validators=[MinValueValidator(1)])
     schedule = models.JSONField(default=dict, blank=True)  # e.g., {"Mon": "9-11", "Wed": "1-3"}
 
     class Meta:
-        ordering = ["-start_date"]
+        ordering = ["code"]
         indexes = [
             models.Index(fields=["code"]),
-            models.Index(fields=["start_date"]),
         ]
         verbose_name = "Batch"
         verbose_name_plural = "Batches"
@@ -95,7 +94,7 @@ class Batch(models.Model):
 class Enrollment(models.Model):
     """
     Represents a student's enrollment in a batch.
-    Ensures a student can't enroll twice in the same batch.
+    Stores the individual student's start and completion date.
     """
     STATUS_CHOICES = [
         ("active", "Active"),
@@ -106,6 +105,7 @@ class Enrollment(models.Model):
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="enrollments")
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE, related_name="enrollments")
     enrolled_on = models.DateField(auto_now_add=True)
+    completion_date = models.DateField(null=True, blank=True, editable=False)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
 
     class Meta:
@@ -119,6 +119,20 @@ class Enrollment(models.Model):
 
     def __str__(self):
         return f"{self.student.user.get_full_name()} → {self.batch.code}"
+
+    def save(self, *args, **kwargs):
+        """
+        Automatically calculate the completion_date based on
+        the enrollment date and the course duration.
+        """
+        # Only calculate on the first save (when pk is None)
+        if not self.pk and not self.completion_date:
+            duration_weeks = self.batch.course.duration_weeks
+            # Use enrolled_on if it's set, otherwise use today's date
+            start_date = self.enrolled_on if self.enrolled_on else timezone.localdate()
+            self.completion_date = start_date + timedelta(weeks=duration_weeks)
+        
+        super().save(*args, **kwargs) # Call the "real" save method.
 
 
 class BatchFeedback(models.Model):

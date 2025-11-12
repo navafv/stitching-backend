@@ -37,15 +37,8 @@ class BatchSerializer(serializers.ModelSerializer):
         model = Batch
         fields = [
             "id", "course", "course_title", "trainer", "trainer_name",
-            "code", "start_date", "end_date", "capacity", "schedule",
+            "code", "capacity", "schedule",
         ]
-
-    def validate(self, data):
-        """Ensure valid date range for batches."""
-        start_date, end_date = data.get("start_date"), data.get("end_date")
-        if start_date and end_date and end_date < start_date:
-            raise serializers.ValidationError("End date cannot be before start date.")
-        return data
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):
@@ -54,14 +47,15 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     batch_code = serializers.ReadOnlyField(source="batch.code")
     course_title = serializers.ReadOnlyField(source="batch.course.title")
     has_feedback = serializers.SerializerMethodField()
-    course_id = serializers.ReadOnlyField(source="batch.course.id") # <-- **ADD THIS LINE**
+    course_id = serializers.ReadOnlyField(source="batch.course.id") 
+    completion_date = serializers.DateField(read_only=True)
 
     class Meta:
         model = Enrollment
         fields = [
             "id", "student", "student_name", "batch", "batch_code", 
             "enrolled_on", "status", "course_title", "has_feedback",
-            "course_id"  # <-- **ADD THIS FIELD**
+            "course_id", "completion_date"
         ]
         read_only_fields = ["id", "enrolled_on"]
 

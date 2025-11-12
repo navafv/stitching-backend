@@ -7,7 +7,7 @@ Provides summary and performance statistics for dashboards.
 from django.db.models import Count, Q
 from django.utils import timezone
 from rest_framework.decorators import action
-from rest_framework import viewsets
+from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from .models import Attendance, AttendanceEntry
@@ -63,6 +63,20 @@ class AttendanceAnalyticsViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["get"], url_path="student/(?P<student_id>[^/.]+)")
     def student_summary(self, request, student_id=None):
         """Returns student-level attendance summary across batches."""
+
+        try:
+            student_profile_id = request.user.student.id
+        except Student.DoesNotExist:
+            student_profile_id = None
+
+        if not request.user.is_superuser and (
+            not student_profile_id or str(student_profile_id) != str(student_id)
+        ):
+            return Response(
+                {"detail": "You do not have permission to view this attendance data."}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         student = Student.objects.filter(id=student_id).first()
         if not student:
             return Response({"detail": "Student not found."}, status=404)

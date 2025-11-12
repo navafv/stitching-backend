@@ -9,9 +9,9 @@ Enhancements:
 
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
-from .models import Attendance
-from .serializers import AttendanceSerializer
-from api.permissions import IsStaffOrReadOnly
+from .models import Attendance, AttendanceEntry
+from .serializers import AttendanceSerializer, StudentAttendanceEntrySerializer
+from api.permissions import IsStaffOrReadOnly, IsStudent
 
 
 class AttendanceViewSet(viewsets.ModelViewSet):
@@ -26,3 +26,34 @@ class AttendanceViewSet(viewsets.ModelViewSet):
     filterset_fields = ["batch", "date", "batch__course"]
     search_fields = ["batch__code", "remarks", "taken_by__username"]
     ordering_fields = ["date", "id"]
+
+
+class StudentAttendanceViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Read-only endpoint for a student to view their own attendance history.
+    """
+    queryset = AttendanceEntry.objects.all()
+    serializer_class = StudentAttendanceEntrySerializer
+    permission_classes = [IsStudent] # Only students can access this
+
+    def get_queryset(self):
+        """
+        This is the key: filter the results to *only* entries
+        that belong to the currently logged-in student.
+        """
+        try:
+            student_id = self.request.user.student.id
+            return (
+                super()
+                .get_queryset()
+                .filter(student_id=student_id)
+                .select_related(
+                    "attendance", 
+                    "attendance__batch", 
+                    "attendance__batch__course"
+                )
+                .order_by("-attendance__date")
+            )
+        except Exception:
+            # If user has no student profile or any other issue, return nothing
+            return AttendanceEntry.objects.none()

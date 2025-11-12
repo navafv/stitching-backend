@@ -11,6 +11,18 @@ from django.db import transaction
 from rest_framework import serializers
 from .models import Attendance, AttendanceEntry
 
+class StudentAttendanceEntrySerializer(serializers.ModelSerializer):
+    """
+    Read-only serializer for a student to view their own attendance.
+    """
+    date = serializers.ReadOnlyField(source="attendance.date")
+    batch_code = serializers.ReadOnlyField(source="attendance.batch.code")
+    course_title = serializers.ReadOnlyField(source="attendance.batch.course.title")
+
+    class Meta:
+        model = AttendanceEntry
+        fields = ["id", "date", "batch_code", "course_title", "status"]
+
 
 class AttendanceEntrySerializer(serializers.ModelSerializer):
     """Serializer for individual student attendance entry."""

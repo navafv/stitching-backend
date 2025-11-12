@@ -1,11 +1,3 @@
-"""
-UPDATED FILE: stitching-backend/accounts/serializers.py
-
-CRITICAL FIX: Added `is_superuser` to the UserSerializer.
-This is essential for the frontend to distinguish
-between an Admin (superuser) and a Teacher (staff).
-"""
-
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from .models import Role, User
@@ -33,20 +25,51 @@ class UserSerializer(serializers.ModelSerializer):
         fields = [
             "id", "username", "email", "first_name", "last_name",
             "phone", "address", "role", "role_id", "is_active", 
-            "is_staff", "is_superuser", "student_id", # <-- ADDED `is_superuser`
+            "is_staff", "is_superuser", "student_id",
         ]
-        read_only_fields = ["id", "is_staff", "is_superuser"] # <-- ADDED `is_superuser`
-
-    def update(self, instance, validated_data):
-        """Prevent accidental password overwrite during update."""
-        validated_data.pop("password", None)
-        return super().update(instance, validated_data)
+        read_only_fields = ["id", "is_superuser"] 
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating new users securely."""
+    """
+    Serializer for creating new users (for Admins).
+    Allows setting the is_staff flag for new teachers.
+    """
     role_id = serializers.PrimaryKeyRelatedField(
-        queryset=Role.objects.all(), source="role", write_only=True, required=False
+        queryset=Role.objects.all(), source="role", write_only=True, required=False, allow_null=True
+    )
+    password = serializers.CharField(write_only=True)
+    is_staff = serializers.BooleanField(default=False, required=False)
+
+    class Meta:
+        model = User
+        fields = [
+            "id", "username", "email", "first_name", "last_name",
+            "phone", "address", "role_id", "password", "is_staff",
+        ]
+        read_only_fields = ["id"]
+
+    def validate_password(self, value):
+        """Use Django's built-in validators."""
+        validate_password(value)
+        return value
+
+    def create(self, validated_data):
+        """Hashes password properly on creation."""
+        password = validated_data.pop("password")
+        user = User(**validated_data) # is_staff is set here
+        user.set_password(password)
+        user.save()
+        return user
+
+
+class StudentUserCreateSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating new users securely (for student conversion).
+    Ensures is_staff is always False.
+    """
+    role_id = serializers.PrimaryKeyRelatedField(
+        queryset=Role.objects.all(), source="role", write_only=True, required=False, allow_null=True
     )
     password = serializers.CharField(write_only=True)
 
@@ -66,6 +89,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         """Hashes password properly on creation."""
         password = validated_data.pop("password")
+
+        validated_data['is_staff'] = False
+        validated_data['is_superuser'] = False
+        
         user = User(**validated_data)
         user.set_password(password)
         user.save()

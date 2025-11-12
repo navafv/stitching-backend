@@ -1,7 +1,5 @@
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from datetime import timedelta
-from courses.models import Batch
 from finance.models import FeesReceipt
 from students.models import Student
 from notifications.models import Notification
@@ -15,18 +13,7 @@ class Command(BaseCommand):
         
         count = 0
 
-        # 1. Notify trainers for batches starting tomorrow
-        for batch in Batch.objects.filter(start_date=today + timedelta(days=1)):
-            if batch.trainer: # Check if trainer exists
-                Notification.objects.get_or_create(
-                    user=batch.trainer.user,
-                    title="Upcoming Batch Reminder",
-                    message=f"Your batch '{batch.code}' starts tomorrow.",
-                    level="info",
-                )
-                count += 1
-
-        # 2. Notify students without any fee receipt yet
+        # 1. Notify students without any fee receipt yet
         for student in Student.objects.filter(active=True, user__is_active=True):
             if not FeesReceipt.objects.filter(student=student).exists():
                 Notification.objects.get_or_create(

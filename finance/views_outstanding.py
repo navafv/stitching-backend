@@ -9,7 +9,7 @@ frontend API calls and fix 404 errors.
 """
 
 from django.db.models import Sum, F
-from rest_framework import viewsets
+from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -34,6 +34,23 @@ class OutstandingFeesViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["get"], url_path="student/(?P<student_id>[^/.]+)")
     def student_outstanding(self, request, student_id=None):
         """Returns how much a student has paid and owes."""
+
+        try:
+            student_profile_id = request.user.student.id
+        except Student.DoesNotExist:
+            student_profile_id = None
+
+        # Check permissions:
+        # If the user is NOT an admin AND
+        # (they are not a student OR they are requesting an ID that isn't theirs)
+        if not request.user.is_superuser and (
+            not student_profile_id or str(student_profile_id) != str(student_id)
+        ):
+            return Response(
+                {"detail": "You do not have permission to view this financial data."}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
         student = Student.objects.filter(id=student_id).select_related("user").first()
         if not student:
             return Response({"detail": "Student not found."}, status=404)

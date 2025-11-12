@@ -17,7 +17,8 @@ from .serializers import (
     EnquirySerializer, StudentSerializer, StudentMeasurementSerializer, 
     StudentSelfUpdateSerializer, HistoricalStudentSerializer
 )
-from api.permissions import IsStaffOrReadOnly, IsStudent
+from api.permissions import IsStaffOrReadOnly, IsStudent, IsAdmin
+from rest_framework_simplejwt.authentication import JWTAuthentication
 
 
 class EnquiryViewSet(viewsets.ModelViewSet):
@@ -120,6 +121,7 @@ class HistoricalStudentViewSet(viewsets.ReadOnlyModelViewSet):
     """
     queryset = Student.history.select_related("history_user", "user").all()
     serializer_class = HistoricalStudentSerializer
-    permission_classes = [IsAdminUser]
+    permission_classes = [IsAdmin] 
+    authentication_classes = [JWTAuthentication] 
     filterset_fields = ["history_type", "history_user", "reg_no"]
     search_fields = ["reg_no", "guardian_name", "user__username"]

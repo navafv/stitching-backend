@@ -10,7 +10,7 @@ Enhancements:
 from django.db import transaction
 from rest_framework import serializers
 from .models import Enquiry, Student, StudentMeasurement
-from accounts.serializers import UserSerializer, UserCreateSerializer
+from accounts.serializers import UserSerializer, StudentUserCreateSerializer
 from django.utils import timezone
 
 
@@ -33,7 +33,7 @@ class StudentSerializer(serializers.ModelSerializer):
     Nested user payload is accepted for creation (user + student).
     """
     user = UserSerializer(read_only=True)
-    user_payload = UserCreateSerializer(write_only=True, required=False)
+    user_payload = StudentUserCreateSerializer(write_only=True, required=False)
 
     class Meta:
         model = Student
@@ -57,7 +57,7 @@ class StudentSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 "user_payload": "Required to create a student with user account."
             })
-        user = UserCreateSerializer().create(user_payload)
+        user = StudentUserCreateSerializer().create(user_payload)
         # Optionally auto-generate registration number
         reg_no = validated_data.get("reg_no") or Student.generate_reg_no()
         student = Student.objects.create(user=user, reg_no=reg_no, **validated_data)
