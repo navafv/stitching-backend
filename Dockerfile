@@ -13,15 +13,13 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
-    # WeasyPrint dependencies
-    libpango-1.0-0 \
-    libpangoft2-1.0-0 \
+    # WeasyPrint dependencies REMOVED
     && rm -rf /var/lib/apt/lists/*
 
 # Install python dependencies
 COPY requirements.txt .
 RUN pip_no_cache_dir=off pip install --upgrade pip
-RUN pip_no_cache_dir=off pip install -r requirments.txt
+RUN pip_no_cache_dir=off pip install -r requirements.txt # <-- MISTAKE IN ORIGINAL, fixed to requirements.txt
 
 # Stage 2: Final stage
 FROM python:3.11-slim
@@ -31,9 +29,7 @@ WORKDIR /app
 # Install runtime dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    # WeasyPrint runtime dependencies
-    libpango-1.0-0 \
-    libpangoft2-1.0-0 \
+    # WeasyPrint runtime dependencies REMOVED
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed python packages from builder stage

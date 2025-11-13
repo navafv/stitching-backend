@@ -16,7 +16,10 @@ class CourseSerializer(serializers.ModelSerializer):
     """Serializer for Course model."""
     class Meta:
         model = Course
-        fields = "__all__"
+        fields = [
+            "id", "code", "title", "duration_weeks", "total_fees", 
+            "syllabus", "active", "required_attendance_days"
+        ]
 
 
 class TrainerSerializer(serializers.ModelSerializer):
@@ -49,15 +52,24 @@ class EnrollmentSerializer(serializers.ModelSerializer):
     has_feedback = serializers.SerializerMethodField()
     course_id = serializers.ReadOnlyField(source="batch.course.id") 
     completion_date = serializers.DateField(read_only=True)
+    present_days = serializers.SerializerMethodField()
+    required_days = serializers.SerializerMethodField()
 
     class Meta:
         model = Enrollment
         fields = [
             "id", "student", "student_name", "batch", "batch_code", 
             "enrolled_on", "status", "course_title", "has_feedback",
-            "course_id", "completion_date"
+            "course_id", "completion_date",
+            "present_days", "required_days"
         ]
         read_only_fields = ["id", "enrolled_on"]
+    
+    def get_present_days(self, obj):
+        return obj.get_present_days_count()
+
+    def get_required_days(self, obj):
+        return obj.batch.course.required_attendance_days
 
     def get_has_feedback(self, obj):
         # Check if the one-to-one reverse relation exists

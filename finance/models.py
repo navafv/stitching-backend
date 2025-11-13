@@ -1,18 +1,4 @@
-"""
-Finance App Models
-------------------
-Covers:
-- FeesReceipt: income from students
-- Expense: institute expenses
-- Payroll: trainer salary slips (monthly)
-
-Improvements:
-- Added DB indexes & Meta ordering for performance.
-- Added sensible validators (positive amounts, month format).
-- Added constraints (unique payroll per trainer+month).
-- Kept field names the same to avoid breaking your API.
-"""
-
+# ... (imports are unchanged) ...
 from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator, RegexValidator
@@ -39,6 +25,10 @@ class FeesReceipt(models.Model):
     date = models.DateField(auto_now_add=True)  # keep existing behavior for compatibility
     posted_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
     locked = models.BooleanField(default=False)
+    
+    # --- ADD THIS NEW FIELD ---
+    pdf_file = models.FileField(upload_to="finance/receipts/", blank=True, null=True)
+    
     history = HistoricalRecords()
 
     class Meta:
@@ -60,7 +50,7 @@ class FeesReceipt(models.Model):
         """Receipts marked locked are immutable."""
         return not self.locked
 
-
+# ... (rest of finance/models.py is unchanged) ...
 class Expense(models.Model):
     CATEGORY_CHOICES = [
         ("material", "Material"),

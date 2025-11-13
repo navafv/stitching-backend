@@ -1,17 +1,20 @@
 from django.template.loader import render_to_string
 from django.core.files.base import ContentFile
-from weasyprint import HTML
+# --- 1. REMOVE WEASYPRINT, IMPORT XHTML2PDF ---
+# from weasyprint import HTML
+from xhtml2pdf import pisa
+# --- END IMPORTS ---
 import io
 import logging
 from .models import Certificate
-from django.conf import settings # <-- Import settings
+from django.conf import settings 
 
-# Set up a logger
 logger = logging.getLogger(__name__)
 
+# --- 2. RENAME FUNCTION TO BE CLEAR ---
 def generate_certificate_pdf_sync(cert_id):
     """
-    Generates a PDF certificate SYNCHRONOUSLY.
+    Generates a PDF certificate SYNCHRONOUSLY using xhtml2pdf.
     """
     cert = Certificate.objects.select_related("student__user", "course").filter(id=cert_id).first()
     if not cert:
@@ -23,7 +26,7 @@ def generate_certificate_pdf_sync(cert_id):
         frontend_url = settings.CORS_ALLOWED_ORIGINS[0] 
         verify_url = f"{frontend_url}/verify?hash={cert.qr_hash}"
         
-        # --- NEW: Logic to convert weeks to months ---
+        # --- Logic to convert weeks to months ---
         duration_text = ""
         if cert.course and cert.course.duration_weeks:
             if cert.course.duration_weeks == 12:
@@ -31,14 +34,12 @@ def generate_certificate_pdf_sync(cert_id):
             elif cert.course.duration_weeks == 24:
                 duration_text = "6 Month"
             else:
-                # Fallback for any other duration
                 duration_text = f"{cert.course.duration_weeks} Week"
-        # --- END NEW LOGIC ---
 
         context = {
             "certificate": cert,
             "verify_url": verify_url,
-            "duration_text": duration_text  # <-- Pass new variable to template
+            "duration_text": duration_text
         }
         
         # Prepare HTML content
@@ -47,8 +48,17 @@ def generate_certificate_pdf_sync(cert_id):
         # Use in-memory BytesIO
         pdf_buffer = io.BytesIO()
         
-        # Write the PDF directly to the in-memory buffer
-        HTML(string=html_content).write_pdf(pdf_buffer)
+        # --- 3. Use pisa to create the PDF ---
+        pisa_status = pisa.CreatePDF(
+            html_content,    # the HTML to convert
+            dest=pdf_buffer  # file-like object to receive result
+        )
+
+        if pisa_status.err:
+            logger.error(f"Error generating PDF for {cert.certificate_no}: {pisa_status.err}")
+            return
+        # --- END PDF CREATION ---
+        
         pdf_buffer.seek(0)
         
         # Save the buffer's contents directly to the model's FileField
@@ -56,5 +66,4 @@ def generate_certificate_pdf_sync(cert_id):
         logger.info(f"Successfully generated PDF for {cert.certificate_no}")
     
     except Exception as e:
-        # Log the error if something goes wrong
         logger.error(f"Error generating PDF for {cert.certificate_no}: {e}", exc_info=True)

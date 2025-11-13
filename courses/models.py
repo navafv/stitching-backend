@@ -16,6 +16,7 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from students.models import Student
 from django.utils import timezone
 from datetime import timedelta
+from django.db.models import Q, Count
 
 
 class Course(models.Model):
@@ -26,6 +27,10 @@ class Course(models.Model):
     total_fees = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     syllabus = models.TextField(blank=True)
     active = models.BooleanField(default=True)
+    required_attendance_days = models.PositiveIntegerField(
+        default=36, 
+        help_text="Total 'Present' days required to complete"
+    )
 
     class Meta:
         ordering = ["title"]
@@ -122,17 +127,34 @@ class Enrollment(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        Automatically calculate the completion_date based on
-        the enrollment date and the course duration.
+        REMOVED: Automatic calculation of completion_date.
+        This is now handled by checking attendance count.
         """
-        # Only calculate on the first save (when pk is None)
-        if not self.pk and not self.completion_date:
-            duration_weeks = self.batch.course.duration_weeks
-            # Use enrolled_on if it's set, otherwise use today's date
-            start_date = self.enrolled_on if self.enrolled_on else timezone.localdate()
-            self.completion_date = start_date + timedelta(weeks=duration_weeks)
-        
+        # (The old logic is removed)
         super().save(*args, **kwargs) # Call the "real" save method.
+    
+    def get_present_days_count(self):
+        """Counts all 'Present' attendance entries for this student in this course."""
+        # We check against the course, not the batch, in case the student
+        # was moved between batches of the same course.
+        return self.student.attendanceentry_set.filter(
+            attendance__batch__course=self.batch.course,
+            status="P"
+        ).count()
+    
+    def check_and_update_status(self):
+        """
+        Checks attendance count against course requirement and updates
+        status to 'completed' if met.
+        """
+        if self.status == "active": # Only check active enrollments
+            present_count = self.get_present_days_count()
+            required_count = self.batch.course.required_attendance_days
+            
+            if present_count >= required_count:
+                self.status = "completed"
+                self.completion_date = timezone.now().date() # Set completion date to today
+                self.save(update_fields=["status", "completion_date"])
 
 
 class BatchFeedback(models.Model):

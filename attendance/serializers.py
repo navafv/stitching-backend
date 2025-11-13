@@ -10,6 +10,8 @@ Enhancements:
 from django.db import transaction
 from rest_framework import serializers
 from .models import Attendance, AttendanceEntry
+from courses.models import Enrollment
+
 
 class StudentAttendanceEntrySerializer(serializers.ModelSerializer):
     """
@@ -56,35 +58,67 @@ class AttendanceSerializer(serializers.ModelSerializer):
     def get_summary(self, obj):
         """Returns attendance summary breakdown."""
         return obj.summary()
+    
+    def _check_student_completion(self, batch, student_id):
+        """Finds the student's enrollment and checks their status."""
+        try:
+            enrollment = Enrollment.objects.get(
+                student_id=student_id, 
+                batch__course=batch.course
+            )
+            enrollment.check_and_update_status()
+        except Enrollment.DoesNotExist:
+            # Student might be in this batch but enrolled in a different course?
+            # Or just no enrollment. Safe to ignore.
+            pass
+        except Enrollment.MultipleObjectsReturned:
+            # This shouldn't happen with the unique_together, but just in case
+            enrollments = Enrollment.objects.filter(
+                student_id=student_id, 
+                batch__course=batch.course
+            )
+            for enrollment in enrollments:
+                enrollment.check_and_update_status()
 
     @transaction.atomic
     def create(self, validated_data):
         """Safely creates attendance with entries."""
-        entries = validated_data.pop("entries", [])
+        entries_data = validated_data.pop("entries", [])
         attendance = Attendance.objects.create(**validated_data)
-
-        # Prevent duplicate students and ensure same batch
-        student_ids = [e["student"].id for e in entries]
+        
+        student_ids = [e["student"].id for e in entries_data]
         if len(student_ids) != len(set(student_ids)):
             raise serializers.ValidationError("Duplicate student entries detected.")
 
         AttendanceEntry.objects.bulk_create([
-            AttendanceEntry(attendance=attendance, **e) for e in entries
+            AttendanceEntry(attendance=attendance, **e) for e in entries_data
         ])
+        
+        for student_id in student_ids:
+            self._check_student_completion(attendance.batch, student_id)
+            
         return attendance
 
     @transaction.atomic
     def update(self, instance, validated_data):
         """Safely replaces or updates attendance entries."""
-        entries = validated_data.pop("entries", None)
+        entries_data = validated_data.pop("entries", None)
         for attr, val in validated_data.items():
             setattr(instance, attr, val)
         instance.save()
 
-        if entries is not None:
+        if entries_data is not None:
+            student_ids = [e["student"].id for e in entries_data]
+            if len(student_ids) != len(set(student_ids)):
+                raise serializers.ValidationError("Duplicate student entries detected.")
+
             # simple approach: replace all entries
             instance.entries.all().delete()
             AttendanceEntry.objects.bulk_create([
-                AttendanceEntry(attendance=instance, **e) for e in entries
+                AttendanceEntry(attendance=instance, **e) for e in entries_data
             ])
+            
+            for student_id in student_ids:
+                self._check_student_completion(instance.batch, student_id)
+                
         return instance
