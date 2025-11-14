@@ -1,10 +1,8 @@
 """
-Attendance Views
-----------------
-Enhancements:
-- select_related optimizations for joined lookups.
-- Restricted to staff for write access.
-- Added filtering and ordering.
+Views for the 'attendance' app.
+
+Provides API endpoints for staff to manage attendance records
+and for students to view their own attendance history.
 """
 
 from rest_framework import viewsets
@@ -12,14 +10,19 @@ from rest_framework.permissions import IsAuthenticated
 from .models import Attendance, AttendanceEntry
 from .serializers import AttendanceSerializer, StudentAttendanceEntrySerializer
 from api.permissions import IsStaffOrReadOnly, IsStudent
+from students.models import Student
 
 
 class AttendanceViewSet(viewsets.ModelViewSet):
-    """CRUD for attendance records."""
+    """
+    API endpoint for staff to create, read, update, and delete attendance records.
+    Read-only for non-staff users (if any permission).
+    """
     queryset = (
         Attendance.objects
         .select_related("batch", "batch__course", "taken_by")
         .prefetch_related("entries", "entries__student", "entries__student__user")
+        .order_by("-date")
     )
     serializer_class = AttendanceSerializer
     permission_classes = [IsStaffOrReadOnly]
@@ -32,20 +35,19 @@ class StudentAttendanceViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Read-only endpoint for a student to view their own attendance history.
     """
-    queryset = AttendanceEntry.objects.all()
     serializer_class = StudentAttendanceEntrySerializer
     permission_classes = [IsStudent] # Only students can access this
 
     def get_queryset(self):
         """
-        This is the key: filter the results to *only* entries
-        that belong to the currently logged-in student.
+        Filters the queryset to only include entries for the
+        currently authenticated student.
         """
         try:
+            # Ensure the user has an associated student profile
             student_id = self.request.user.student.id
             return (
-                super()
-                .get_queryset()
+                AttendanceEntry.objects
                 .filter(student_id=student_id)
                 .select_related(
                     "attendance", 
@@ -54,6 +56,8 @@ class StudentAttendanceViewSet(viewsets.ReadOnlyModelViewSet):
                 )
                 .order_by("-attendance__date")
             )
+        except Student.DoesNotExist:
+            # If user is not a student, return an empty queryset
+            return AttendanceEntry.objects.none()
         except Exception:
-            # If user has no student profile or any other issue, return nothing
             return AttendanceEntry.objects.none()

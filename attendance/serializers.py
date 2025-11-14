@@ -1,10 +1,8 @@
 """
-Attendance Serializers
-----------------------
-Enhancements:
-- Added atomic creation and update of entries.
-- Added validation for duplicate students and batch mismatch.
-- Returns summary info and readable labels.
+Serializers for the 'attendance' app.
+
+Handles the creation and updating of Attendance records, including
+nested AttendanceEntry instances, with transactional integrity.
 """
 
 from django.db import transaction
@@ -15,7 +13,8 @@ from courses.models import Enrollment
 
 class StudentAttendanceEntrySerializer(serializers.ModelSerializer):
     """
-    Read-only serializer for a student to view their own attendance.
+    Read-only serializer for a student viewing their own attendance history.
+    Flattens related data for easy consumption.
     """
     date = serializers.ReadOnlyField(source="attendance.date")
     batch_code = serializers.ReadOnlyField(source="attendance.batch.code")
@@ -27,7 +26,7 @@ class StudentAttendanceEntrySerializer(serializers.ModelSerializer):
 
 
 class AttendanceEntrySerializer(serializers.ModelSerializer):
-    """Serializer for individual student attendance entry."""
+    """Serializer for a single attendance entry, used nested within AttendanceSerializer."""
     student_name = serializers.ReadOnlyField(source="student.user.get_full_name")
 
     class Meta:
@@ -42,7 +41,9 @@ class AttendanceEntrySerializer(serializers.ModelSerializer):
 
 
 class AttendanceSerializer(serializers.ModelSerializer):
-    """Serializer for Attendance with nested entries."""
+    """
+    Serializer for creating and managing an Attendance sheet with its nested entries.
+    """
     entries = AttendanceEntrySerializer(many=True)
     batch_code = serializers.ReadOnlyField(source="batch.code")
     summary = serializers.SerializerMethodField(read_only=True)
@@ -53,47 +54,62 @@ class AttendanceSerializer(serializers.ModelSerializer):
             "id", "batch", "batch_code", "date", "taken_by", "remarks",
             "entries", "summary",
         ]
-        read_only_fields = ["id", "summary"]
+        read_only_fields = ["id", "summary", "batch_code"]
 
     def get_summary(self, obj):
-        """Returns attendance summary breakdown."""
+        """Returns the calculated P/A/L summary from the model."""
         return obj.summary()
     
     def _check_student_completion(self, batch, student_id):
-        """Finds the student's enrollment and checks their status."""
+        """
+        Finds the student's enrollment for this course and triggers
+        a status check to see if they have met completion requirements.
+        """
         try:
+            # Find enrollment based on course, not specific batch,
+            # as attendance is counted cross-batch for the same course.
             enrollment = Enrollment.objects.get(
                 student_id=student_id, 
-                batch__course=batch.course
+                batch__course=batch.course,
+                status="active" # Only check active enrollments
             )
             enrollment.check_and_update_status()
         except Enrollment.DoesNotExist:
-            # Student might be in this batch but enrolled in a different course?
-            # Or just no enrollment. Safe to ignore.
+            # No active enrollment found for this student/course.
             pass
         except Enrollment.MultipleObjectsReturned:
-            # This shouldn't happen with the unique_together, but just in case
+            # Handle rare case of multiple active enrollments in the same course.
             enrollments = Enrollment.objects.filter(
                 student_id=student_id, 
-                batch__course=batch.course
+                batch__course=batch.course,
+                status="active"
             )
             for enrollment in enrollments:
                 enrollment.check_and_update_status()
 
-    @transaction.atomic
-    def create(self, validated_data):
-        """Safely creates attendance with entries."""
-        entries_data = validated_data.pop("entries", [])
-        attendance = Attendance.objects.create(**validated_data)
-        
+    def _validate_student_ids(self, entries_data):
+        """Ensures no duplicate students are in a single attendance payload."""
         student_ids = [e["student"].id for e in entries_data]
         if len(student_ids) != len(set(student_ids)):
-            raise serializers.ValidationError("Duplicate student entries detected.")
+            raise serializers.ValidationError({"entries": "Duplicate student entries detected."})
+        return student_ids
+
+    @transaction.atomic
+    def create(self, validated_data):
+        """
+        Creates an Attendance record and its associated entries in a transaction.
+        Checks for student completion status after creation.
+        """
+        entries_data = validated_data.pop("entries", [])
+        student_ids = self._validate_student_ids(entries_data)
+        
+        attendance = Attendance.objects.create(**validated_data)
 
         AttendanceEntry.objects.bulk_create([
             AttendanceEntry(attendance=attendance, **e) for e in entries_data
         ])
         
+        # After saving, check completion status for each student
         for student_id in student_ids:
             self._check_student_completion(attendance.batch, student_id)
             
@@ -101,23 +117,27 @@ class AttendanceSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        """Safely replaces or updates attendance entries."""
+        """
+        Updates an Attendance record and replaces its entries in a transaction.
+        Checks for student completion status after update.
+        """
         entries_data = validated_data.pop("entries", None)
+        
+        # Update parent Attendance instance
         for attr, val in validated_data.items():
             setattr(instance, attr, val)
         instance.save()
 
         if entries_data is not None:
-            student_ids = [e["student"].id for e in entries_data]
-            if len(student_ids) != len(set(student_ids)):
-                raise serializers.ValidationError("Duplicate student entries detected.")
+            # If entries are provided, replace them
+            student_ids = self._validate_student_ids(entries_data)
 
-            # simple approach: replace all entries
             instance.entries.all().delete()
             AttendanceEntry.objects.bulk_create([
                 AttendanceEntry(attendance=instance, **e) for e in entries_data
             ])
             
+            # After saving, check completion status for each student
             for student_id in student_ids:
                 self._check_student_completion(instance.batch, student_id)
                 

@@ -1,13 +1,8 @@
 """
-Attendance App Models
----------------------
-Tracks daily attendance for batches and their students.
+Data models for the 'attendance' app.
 
-Enhancements:
-- Added indexes for performance on date, batch, and status.
-- Added verbose names and Meta options.
-- Added helper methods for summary counts.
-- Enforced constraints for consistency.
+Defines the Attendance model (a daily record for a batch) and
+the AttendanceEntry model (a student's status for that day).
 """
 
 from django.db import models
@@ -18,14 +13,16 @@ from django.core.validators import MinLengthValidator
 
 
 class Attendance(models.Model):
-    """Represents the attendance record for a specific batch on a specific date."""
+    """
+    Represents a single day's attendance sheet for a specific batch.
+    """
     batch = models.ForeignKey(Batch, on_delete=models.CASCADE, related_name="attendance_records")
     date = models.DateField()
     taken_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
     remarks = models.TextField(blank=True)
 
     class Meta:
-        unique_together = ("batch", "date")
+        unique_together = ("batch", "date") # Only one record per batch per day
         ordering = ["-date"]
         indexes = [
             models.Index(fields=["date"]),
@@ -39,17 +36,23 @@ class Attendance(models.Model):
 
     @property
     def total_students(self) -> int:
-        """Returns total number of students marked in this attendance."""
+        """Returns the total number of students marked in this attendance."""
         return self.entries.count()
 
     def summary(self) -> dict:
-        """Returns a breakdown of attendance by status (P/A/L)."""
+        """
+        Returns a breakdown of attendance counts by status (P/A/L).
+        Example: {'P': 10, 'A': 2, 'L': 1}
+        """
         counts = self.entries.values("status").order_by("status").annotate(total=models.Count("status"))
         return {c["status"]: c["total"] for c in counts}
 
 
 class AttendanceEntry(models.Model):
-    """Represents the attendance status of a single student in a batch."""
+    """
+    Represents the status (Present, Absent, Leave) of a single student
+    for a specific Attendance record.
+    """
     STATUS_CHOICES = [
         ("P", "Present"),
         ("A", "Absent"),
@@ -66,7 +69,7 @@ class AttendanceEntry(models.Model):
     )
 
     class Meta:
-        unique_together = ("attendance", "student")
+        unique_together = ("attendance", "student") # Student marked once per sheet
         indexes = [
             models.Index(fields=["status"]),
             models.Index(fields=["student"]),

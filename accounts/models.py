@@ -1,13 +1,9 @@
 """
-Accounts App Models
--------------------
-Contains Role and custom User models.
+Data models for the 'accounts' app.
 
-Enhancements:
-- Added docstrings and Meta options for clarity.
-- Added `unique_together` on Role (safety).
-- Added verbose names for admin readability.
-- Added indexes for faster filtering on role and username.
+Defines the Role and custom User models, extending Django's
+authentication system to include role-based access control and
+additional user profile information.
 """
 
 from django.contrib.auth.models import AbstractUser
@@ -16,9 +12,13 @@ from simple_history.models import HistoricalRecords
 
 
 class Role(models.Model):
-    """Defines a simple user role (e.g., Admin, Trainer, Student)."""
+    """
+    Defines a user role within the system (e.g., Admin, Trainer, Student).
+    """
     name = models.CharField(max_length=50, unique=True)
     description = models.TextField(blank=True)
+    
+    history = HistoricalRecords() # Tracks changes to Role instances
 
     class Meta:
         ordering = ["name"]
@@ -29,16 +29,15 @@ class Role(models.Model):
         return self.name
     
     def get_user_ids(self):
-        """Helper to get all user IDs associated with this role."""
+        """Helper to retrieve all user IDs associated with this role."""
         return list(self.user_set.values_list('id', flat=True))
 
 
 class User(AbstractUser):
     """
-    Extends Django's built-in AbstractUser with additional fields:
-    - role: optional link to Role
-    - phone: contact number
-    - address: text field for address
+    Custom User model extending Django's AbstractUser.
+
+    Adds role-based permissions and basic contact info.
     """
     role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, blank=True)
     phone = models.CharField(max_length=15, blank=True)

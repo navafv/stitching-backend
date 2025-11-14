@@ -1,9 +1,10 @@
+"""
+Utility functions for the 'certificates' app, primarily for PDF generation.
+"""
+
 from django.template.loader import render_to_string
 from django.core.files.base import ContentFile
-# --- 1. REMOVE WEASYPRINT, IMPORT XHTML2PDF ---
-# from weasyprint import HTML
-from xhtml2pdf import pisa
-# --- END IMPORTS ---
+from xhtml2pdf import pisa  # Use xhtml2pdf for PDF generation
 import io
 import logging
 from .models import Certificate
@@ -11,30 +12,32 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-# --- 2. RENAME FUNCTION TO BE CLEAR ---
-def generate_certificate_pdf_sync(cert_id):
+def generate_certificate_pdf_sync(cert_id: int):
     """
-    Generates a PDF certificate SYNCHRONOUSLY using xhtml2pdf.
+    Generates a PDF for a specific Certificate instance and saves it
+    to the model's `pdf_file` field. Runs synchronously.
     """
-    cert = Certificate.objects.select_related("student__user", "course").filter(id=cert_id).first()
-    if not cert:
+    try:
+        cert = Certificate.objects.select_related("student__user", "course").get(id=cert_id)
+    except Certificate.DoesNotExist:
         logger.warning(f"Certificate {cert_id} not found for PDF generation.")
         return
 
     try:
-        # --- Build the verification URL ---
+        # Assume the first allowed origin is the frontend URL
         frontend_url = settings.CORS_ALLOWED_ORIGINS[0] 
         verify_url = f"{frontend_url}/verify?hash={cert.qr_hash}"
         
-        # --- Logic to convert weeks to months ---
+        # Simple logic to convert course duration to text
         duration_text = ""
         if cert.course and cert.course.duration_weeks:
-            if cert.course.duration_weeks == 12:
+            weeks = cert.course.duration_weeks
+            if weeks == 12:
                 duration_text = "3 Month"
-            elif cert.course.duration_weeks == 24:
+            elif weeks == 24:
                 duration_text = "6 Month"
             else:
-                duration_text = f"{cert.course.duration_weeks} Week"
+                duration_text = f"{weeks} Week"
 
         context = {
             "certificate": cert,
@@ -42,28 +45,26 @@ def generate_certificate_pdf_sync(cert_id):
             "duration_text": duration_text
         }
         
-        # Prepare HTML content
         html_content = render_to_string("certificates/template.html", context)
         
-        # Use in-memory BytesIO
         pdf_buffer = io.BytesIO()
         
-        # --- 3. Use pisa to create the PDF ---
+        # Generate the PDF
         pisa_status = pisa.CreatePDF(
-            html_content,    # the HTML to convert
-            dest=pdf_buffer  # file-like object to receive result
+            html_content,
+            dest=pdf_buffer
         )
 
         if pisa_status.err:
             logger.error(f"Error generating PDF for {cert.certificate_no}: {pisa_status.err}")
             return
-        # --- END PDF CREATION ---
         
         pdf_buffer.seek(0)
+        file_name = f"{cert.certificate_no}.pdf"
         
-        # Save the buffer's contents directly to the model's FileField
-        cert.pdf_file.save(f"{cert.certificate_no}.pdf", ContentFile(pdf_buffer.read()), save=True)
-        logger.info(f"Successfully generated PDF for {cert.certificate_no}")
+        # Save the generated PDF to the FileField
+        cert.pdf_file.save(file_name, ContentFile(pdf_buffer.read()), save=True)
+        logger.info(f"Successfully generated and saved PDF for {cert.certificate_no}")
     
     except Exception as e:
-        logger.error(f"Error generating PDF for {cert.certificate_no}: {e}", exc_info=True)
+        logger.error(f"Unhandled error generating PDF for {cert.certificate_no}: {e}", exc_info=True)

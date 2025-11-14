@@ -1,35 +1,26 @@
 """
-UPDATED FILE: core/settings.py
+Django settings for the 'core' project.
 
-This file is now configured for production deployment.
-It reads sensitive values (SECRET_KEY, DATABASE_URL, etc.) from
-environment variables.
+Configured for production deployment, reading sensitive values
+(SECRET_KEY, DATABASE_URL, etc.) from environment variables.
 """
+
 from pathlib import Path
 from datetime import timedelta
 import os
 import dj_database_url
 
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# ------------------------------------------------------------------------------
-# Environment & Secrets
-# ------------------------------------------------------------------------------
-# SECRET_KEY is required in production
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "dev-only-unsafe")
+# --- Environment & Secrets ---
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "fallback-unsafe-development-key-!@#$")
+DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1"
+ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
-# DEBUG is off by default in production
-# DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1"
-DEBUG = True
 
-# ALLOWED_HOSTS should be set in production
-ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1,192.168.1.2").split(",")
-
-# ------------------------------------------------------------------------------
-# Installed Apps
-# ------------------------------------------------------------------------------
+# --- Application Definition ---
 INSTALLED_APPS = [
-    # Django
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -55,20 +46,20 @@ INSTALLED_APPS = [
     "django_filters",
     "drf_spectacular",
     "drf_spectacular_sidecar",
-    "simple_history",
+    "simple_history", # For model change tracking
 ]
 
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",
+    "corsheaders.middleware.CorsMiddleware", # Must be high up
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware", # <-- Add WhiteNoise for static files
+    "whitenoise.middleware.WhiteNoiseMiddleware", # For serving static files
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "simple_history.middleware.HistoryRequestMiddleware", # <-- Moved from bottom
+    "simple_history.middleware.HistoryRequestMiddleware", # For tracking request user
 ]
 
 ROOT_URLCONF = "core.urls"
@@ -80,6 +71,7 @@ TEMPLATES = [
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
+                "django.template.context_processors.debug",
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
@@ -90,22 +82,21 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "core.wsgi.application"
 
-# ------------------------------------------------------------------------------
-# Database
-# ------------------------------------------------------------------------------
-# Use DATABASE_URL environment variable for production (e.g., postgres://...)
-# Fallback to sqlite for development.
+
+# --- Database ---
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 if DATABASE_URL:
+    # Production: Use DATABASE_URL
     DATABASES = {
         "default": dj_database_url.config(
             default=DATABASE_URL,
-            conn_max_age=600,
+            conn_max_age=600, # Persistent connections
             ssl_require=os.getenv("DATABASE_SSL_REQUIRE", "0") == "1"
         )
     }
 else:
+    # Development: Use local sqlite
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
@@ -114,9 +105,7 @@ else:
     }
 
 
-# ------------------------------------------------------------------------------
-# Auth
-# ------------------------------------------------------------------------------
+# --- Authentication ---
 AUTH_USER_MODEL = "accounts.User"
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
@@ -125,30 +114,26 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-# ------------------------------------------------------------------------------
-# I18N & TZ
-# ------------------------------------------------------------------------------
+
+# --- Internationalization & Timezone ---
 LANGUAGE_CODE = "en-us"
-TIME_ZONE = "Asia/Kolkata"
+TIME_ZONE = "Asia/Kolkata" # Set to project's local timezone
 USE_I18N = True
 USE_TZ = True
 
-# ------------------------------------------------------------------------------
-# Static & Media
-# ------------------------------------------------------------------------------
+
+# --- Static & Media Files ---
 STATIC_URL = "/static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
-# Enable WhiteNoise storage for serving static files efficiently
+STATIC_ROOT = BASE_DIR / "staticfiles" # For 'collectstatic'
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = BASE_DIR / "media" # User-uploaded files
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# ------------------------------------------------------------------------------
-# REST Framework
-# ------------------------------------------------------------------------------
+
+# --- REST Framework ---
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_AUTHENTICATION_CLASSES": (
@@ -172,7 +157,7 @@ REST_FRAMEWORK = {
         "anon": "200/hour",
         "user": "2000/hour",
     },
-    "EXCEPTION_HANDLER": "api.exceptions.custom_exception_handler", # <-- Moved from bottom
+    "EXCEPTION_HANDLER": "api.exceptions.custom_exception_handler",
 }
 
 SIMPLE_JWT = {
@@ -181,64 +166,78 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-# ------------------------------------------------------------------------------
-# CORS / CSRF
-# ------------------------------------------------------------------------------
-# Read from env, fallback to dev server
-CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://192.168.1.2:5173").split(",")
+
+# --- CORS / CSRF ---
+CORS_ALLOWED_ORIGINS = os.getenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
 CORS_ALLOW_CREDENTIALS = True
+CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
 
-CSRF_TRUSTED_ORIGINS = os.getenv("CSRF_TRUSTED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173,http://192.168.1.2:5173").split(",")
 
-
-# ------------------------------------------------------------------------------
-# drf-spectacular (OpenAPI)
-# ------------------------------------------------------------------------------
+# --- API Documentation (drf-spectacular) ---
 SPECTACULAR_SETTINGS = {
     "TITLE": "Stitching Institute Management API",
-    "DESCRIPTION": "Comprehensive backend API for courses, students, finance, attendance, and certificates.",
+    "DESCRIPTION": "Backend API for managing students, courses, finance, and more.",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
     "COMPONENT_SPLIT_REQUEST": True,
-    "SCHEMA_PATH_PREFIX": "/api/v1",
+    "SCHEMA_PATH_PREFIX": "/api/v1", # Important for correct endpoint grouping
 }
 
-# ------------------------------------------------------------------------------
-# Email
-# ------------------------------------------------------------------------------
-EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@stitching.local")
-# Add more email settings (HOST, PORT, USER, PASSWORD, USE_TLS) for production
 
-# ------------------------------------------------------------------------------
-# Logging
-# ------------------------------------------------------------------------------
+# --- Email ---
+if DEBUG:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+else:
+    EMAIL_BACKEND = os.getenv("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+    # Add other required settings for production SMTP (HOST, PORT, USER, PASSWORD, USE_TLS)
+    # EMAIL_HOST = os.getenv("EMAIL_HOST")
+    # EMAIL_PORT = int(os.getenv("EMAIL_PORT", 587))
+    # EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+    # EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+    # EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "1") == "1"
+
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", "noreply@noorinstitute.com")
+
+
+# --- Logging ---
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {"console": {"class": "logging.StreamHandler"}},
-    "root": {"handlers": ["console"], "level": "INFO"},
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO" if not DEBUG else "DEBUG",
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
+    },
 }
 
-# ------------------------------------------------------------------------------
-# Production Security Settings
-# ------------------------------------------------------------------------------
+
+# --- Production Security ---
+# These settings are toggled based on the DEBUG flag
 SECURE_SSL_REDIRECT = not DEBUG
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
 SECURE_HSTS_PRELOAD = not DEBUG
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https') # For reverse proxies
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-# CSP is good but can be tricky; commenting out for "speedy" deployment
-# Re-enable and test carefully.
-# MIDDLEWARE.append("csp.middleware.CSPMiddleware")
-# CSP_DEFAULT_SRC = ("'self'",)
-# CSP_STYLE_SRC = ("'self'", "'unsafe-inline'", "fonts.googleapis.com")
-# CSP_FONT_SRC = ("'self'", "fonts.gstatic.com")
-
-# Sentry (optional)
+# --- Sentry (Optional Error Tracking) ---
 import sentry_sdk
-if os.getenv("SENTRY_DSN"):
-    sentry_sdk.init(dsn=os.getenv("SENTRY_DSN"), traces_sample_rate=0.2)
+SENTRY_DSN = os.getenv("SENTRY_DSN")
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        traces_sample_rate=0.2, # Sample 20% of transactions for performance
+        send_default_pii=True
+    )

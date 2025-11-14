@@ -1,3 +1,12 @@
+"""
+URL configuration for the 'attendance' app.
+
+Registers ViewSets for:
+- `records`: Staff CRUD for daily attendance.
+- `analytics`: Staff-facing analytics endpoints.
+- `my-history`: Student-facing view of their own attendance.
+"""
+
 from rest_framework.routers import DefaultRouter
 from .views import AttendanceViewSet, StudentAttendanceViewSet
 from .views_analytics import AttendanceAnalyticsViewSet

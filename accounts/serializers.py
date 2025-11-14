@@ -1,12 +1,19 @@
+"""
+Serializers for the 'accounts' app.
+
+Handles the conversion of User and Role models to and from JSON,
+including logic for user creation, password changes, and password resets.
+"""
+
 from django.contrib.auth.password_validation import validate_password
 from rest_framework import serializers
 from .models import Role, User
-# --- NEW IMPORTS ---
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
 from django.utils.http import urlsafe_base64_decode
 from django.utils.encoding import force_str
 from django.contrib.auth import get_user_model
-# --- END NEW IMPORTS ---
+
+UserModel = get_user_model()
 
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -18,12 +25,14 @@ class RoleSerializer(serializers.ModelSerializer):
 
 
 class UserSerializer(serializers.ModelSerializer):
-    """Serializer for viewing/updating users (excludes password)."""
+    """
+    Serializer for viewing and updating User instances.
+    Excludes password fields for security.
+    """
     role = RoleSerializer(read_only=True, allow_null=True)
     role_id = serializers.PrimaryKeyRelatedField(
         queryset=Role.objects.all(), source="role", write_only=True, required=False
     )
-
     student_id = serializers.ReadOnlyField(source='student.id', allow_null=True)
 
     class Meta:
@@ -33,18 +42,18 @@ class UserSerializer(serializers.ModelSerializer):
             "phone", "address", "role", "role_id", "is_active", 
             "is_staff", "is_superuser", "student_id",
         ]
-        read_only_fields = ["id", "is_superuser"] 
+        read_only_fields = ["id", "is_superuser", "student_id"] 
 
 
 class UserCreateSerializer(serializers.ModelSerializer):
     """
-    Serializer for creating new users (for Admins).
-    Allows setting the is_staff flag for new teachers.
+    Serializer for creating new users (Admin use).
+    Handles password hashing and allows setting staff status.
     """
     role_id = serializers.PrimaryKeyRelatedField(
         queryset=Role.objects.all(), source="role", write_only=True, required=False, allow_null=True
     )
-    password = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True, validators=[validate_password])
     is_staff = serializers.BooleanField(default=False, required=False)
 
     class Meta:
@@ -55,15 +64,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id"]
 
-    def validate_password(self, value):
-        """Use Django's built-in validators."""
-        validate_password(value)
-        return value
-
     def create(self, validated_data):
-        """Hashes password properly on creation."""
+        """Creates a new user instance with a hashed password."""
         password = validated_data.pop("password")
-        user = User(**validated_data) # is_staff is set here
+        user = User(**validated_data)
         user.set_password(password)
         user.save()
         return user
@@ -71,13 +75,13 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
 class StudentUserCreateSerializer(serializers.ModelSerializer):
     """
-    Serializer for creating new users securely (for student conversion).
-    Ensures is_staff is always False.
+    Serializer for creating a new user tied to a Student profile.
+    Ensures 'is_staff' and 'is_superuser' are always False.
     """
     role_id = serializers.PrimaryKeyRelatedField(
         queryset=Role.objects.all(), source="role", write_only=True, required=False, allow_null=True
     )
-    password = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True, validators=[validate_password])
 
     class Meta:
         model = User
@@ -87,15 +91,11 @@ class StudentUserCreateSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id"]
 
-    def validate_password(self, value):
-        """Use Django's built-in validators."""
-        validate_password(value)
-        return value
-
     def create(self, validated_data):
-        """Hashes password properly on creation."""
+        """Creates a new non-staff user with a hashed password."""
         password = validated_data.pop("password")
-
+        
+        # Ensure student accounts are never created as staff or superusers
         validated_data['is_staff'] = False
         validated_data['is_superuser'] = False
         
@@ -107,29 +107,21 @@ class StudentUserCreateSerializer(serializers.ModelSerializer):
 
 class PasswordChangeSerializer(serializers.Serializer):
     """
-    Serializer for password change endpoint.
+    Serializer for an authenticated user to change their own password.
+    Requires the user's current password for validation.
     """
     old_password = serializers.CharField(required=True, write_only=True)
-    new_password = serializers.CharField(required=True, write_only=True)
+    new_password = serializers.CharField(required=True, write_only=True, validators=[validate_password])
 
-    def validate_new_password(self, value):
-        # Use Django's built-in password validation
-        validate_password(value)
+    def validate_old_password(self, value):
+        """Check that the old password is correct."""
+        user = self.context['request'].user
+        if not user.check_password(value):
+            raise serializers.ValidationError("Wrong password.")
         return value
 
-    def validate(self, data):
-        """
-        Check that the old password is correct.
-        """
-        user = self.context['request'].user
-        if not user.check_password(data.get('old_password')):
-            raise serializers.ValidationError({"old_password": "Wrong password."})
-        return data
-
     def save(self, **kwargs):
-        """
-        Save the new password.
-        """
+        """Sets the new password for the user."""
         user = self.context['request'].user
         user.set_password(self.validated_data['new_password'])
         user.save()
@@ -137,13 +129,11 @@ class PasswordChangeSerializer(serializers.Serializer):
     
 
 class HistoricalUserSerializer(serializers.ModelSerializer):
-    """
-    Read-only serializer for displaying user history.
-    """
+    """Read-only serializer for displaying User change history."""
     history_user_name = serializers.ReadOnlyField(source="history_user.username", allow_null=True)
     
     class Meta:
-        model = User.history.model # Use the auto-created history model
+        model = User.history.model
         fields = [
             "history_id",
             "history_date",
@@ -157,48 +147,41 @@ class HistoricalUserSerializer(serializers.ModelSerializer):
             "is_active",
         ]
 
-# --- NEW SERIALIZERS FOR FORGOT PASSWORD ---
 
 class PasswordResetRequestSerializer(serializers.Serializer):
-    """
-    Serializer for requesting a password reset e-mail.
-    """
+    """Validates the email for a password reset request."""
     email = serializers.EmailField(required=True)
 
     def validate_email(self, value):
-        if not User.objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("No user found with this email address.")
+        """Ensure a user exists with the provided email."""
+        if not User.objects.filter(email__iexact=value, is_active=True).exists():
+            raise serializers.ValidationError("No active user found with this email address.")
         return value
 
 
 class SetNewPasswordSerializer(serializers.Serializer):
     """
-    Serializer for resetting password with a token.
+    Validates the token and new password for setting a new password.
     """
     uidb64 = serializers.CharField(required=True)
     token = serializers.CharField(required=True)
-    new_password = serializers.CharField(required=True, write_only=True)
-
-    def validate_new_password(self, value):
-        validate_password(value)
-        return value
+    new_password = serializers.CharField(required=True, write_only=True, validators=[validate_password])
 
     def validate(self, attrs):
-        User = get_user_model()
+        """Validate the UID and token."""
         try:
             uid = force_str(urlsafe_base64_decode(attrs.get('uidb64')))
-            user = User.objects.get(pk=uid)
-        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            self.user = UserModel.objects.get(pk=uid)
+        except (TypeError, ValueError, OverflowError, UserModel.DoesNotExist):
             raise serializers.ValidationError("Invalid reset link.")
 
-        if not PasswordResetTokenGenerator().check_token(user, attrs.get('token')):
+        if not PasswordResetTokenGenerator().check_token(self.user, attrs.get('token')):
             raise serializers.ValidationError("Invalid or expired reset link.")
 
-        attrs['user'] = user
         return attrs
 
     def save(self, **kwargs):
-        user = self.validated_data['user']
-        user.set_password(self.validated_data['new_password'])
-        user.save()
-        return user
+        """Sets the new password for the validated user."""
+        self.user.set_password(self.validated_data['new_password'])
+        self.user.save()
+        return self.user
