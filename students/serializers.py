@@ -1,10 +1,5 @@
 """
-Students Serializers
---------------------
-Enhancements:
-- Added atomic transaction for user + student creation.
-- Added validation for guardian phone and date.
-- Read/write separation and nested user payload.
+Serializers for the 'students' app.
 """
 
 from django.db import transaction
@@ -21,18 +16,15 @@ class EnquirySerializer(serializers.ModelSerializer):
         fields = "__all__"
         read_only_fields = ["id", "created_at"]
 
-    def validate_phone(self, value):
-        if not value.isdigit() and not value.startswith("+"):
-            raise serializers.ValidationError("Enter a valid phone number.")
-        return value
-
 
 class StudentSerializer(serializers.ModelSerializer):
     """
     Serializer for student data.
-    Nested user payload is accepted for creation (user + student).
+    Handles nested User creation via the 'user_payload' field.
     """
+    # Read-only nested User details
     user = UserSerializer(read_only=True)
+    # Write-only field to accept data for creating a new User
     user_payload = StudentUserCreateSerializer(write_only=True, required=False)
 
     class Meta:
@@ -51,21 +43,34 @@ class StudentSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        """Creates user + student together safely."""
+        """
+        Creates a User and a Student profile together in a single transaction.
+        The 'user_payload' is required for creation.
+        """
         user_payload = validated_data.pop("user_payload", None)
         if not user_payload:
             raise serializers.ValidationError({
-                "user_payload": "Required to create a student with user account."
+                "user_payload": "This field is required to create a new student."
             })
+        
+        # Create the User account
         user = StudentUserCreateSerializer().create(user_payload)
-        # Optionally auto-generate registration number
-        reg_no = validated_data.get("reg_no") or Student.generate_reg_no()
-        student = Student.objects.create(user=user, reg_no=reg_no, **validated_data)
+        
+        # Auto-generate registration number if not provided
+        if "reg_no" not in validated_data or not validated_data["reg_no"]:
+             validated_data["reg_no"] = Student.generate_reg_no()
+        
+        # Create the Student profile linked to the user
+        student = Student.objects.create(user=user, **validated_data)
         return student
 
     @transaction.atomic
     def update(self, instance, validated_data):
-        """Prevent nested user updates."""
+        """
+        Updates the Student instance.
+        'user_payload' is ignored on updates; user data must be
+        updated via the /accounts/users/{id}/ endpoint.
+        """
         validated_data.pop("user_payload", None)
         return super().update(instance, validated_data)
 
@@ -82,8 +87,9 @@ class StudentMeasurementSerializer(serializers.ModelSerializer):
 
 class StudentSelfUpdateSerializer(serializers.ModelSerializer):
     """
-    A simple serializer for students to update their own profile.
-    Primarily used for photo uploads.
+    A limited serializer for students to update their own profile
+    via the '/students/me/' endpoint.
+    Intended primarily for changing the profile photo.
     """
     class Meta:
         model = Student
@@ -92,7 +98,7 @@ class StudentSelfUpdateSerializer(serializers.ModelSerializer):
     
 class HistoricalStudentSerializer(serializers.ModelSerializer):
     """
-    Read-only serializer for displaying student history.
+    Read-only serializer for displaying student change history.
     """
     history_user_name = serializers.ReadOnlyField(source="history_user.username", allow_null=True)
     user_name = serializers.ReadOnlyField(source="user.username", allow_null=True)

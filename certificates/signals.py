@@ -13,13 +13,18 @@ logger = logging.getLogger(__name__)
 @receiver(post_save, sender=Certificate)
 def auto_generate_pdf_on_create(sender, instance, created, **kwargs):
     """
-    When a new Certificate is created, synchronously generate
-    and attach its PDF file.
+    When a new Certificate is created (and only on create),
+    synchronously generate its PDF and attach it to the `pdf_file` field.
     """
     if created:
         try:
             # This is a synchronous call. The API request will wait
             # for the PDF to be generated and saved.
+            # This ensures the PDF is available immediately.
+            logger.info(f"Signal triggered: Generating PDF for new certificate {instance.id}...")
             generate_certificate_pdf_sync(instance.id)
         except Exception as e:
-            logger.error(f"Failed to auto-generate PDF for certificate {instance.id}: {e}", exc_info=True)
+            logger.error(
+                f"Failed to auto-generate PDF for certificate {instance.id}: {e}", 
+                exc_info=True
+            )

@@ -1,3 +1,12 @@
+"""
+Views for the 'messaging' app.
+
+Provides endpoints for:
+- Admins to list all conversations.
+- Students to get their single, dedicated conversation.
+- Both parties to list and create messages within a conversation.
+"""
+
 from rest_framework import viewsets, status, mixins
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
@@ -15,21 +24,27 @@ class ConversationViewSet(
     """
     ViewSet for managing conversations.
     - Admins can list and retrieve all conversations.
-    - Students can list/retrieve only their own conversation.
+    - Students can list/retrieve *only* their own conversation.
     """
     permission_classes = [IsAuthenticated]
     
     def get_serializer_class(self):
-        # Admin gets a list serializer
+        """
+        Admins get a list-oriented serializer (ConversationSerializer).
+        Students get a detailed serializer with nested messages
+        (StudentConversationSerializer).
+        """
         if self.request.user.is_staff:
             return ConversationSerializer
-        # Student gets a detailed serializer with messages
         return StudentConversationSerializer
 
     def get_queryset(self):
+        """
+        Filters conversations based on user role.
+        """
         user = self.request.user
         if user.is_staff:
-            # Admins see all conversations, ordered by most recent message
+            # Admins see all conversations, ordered by most recent
             return Conversation.objects.select_related("student__user").order_by('-last_message_at')
         
         # Students only see their own conversation
@@ -39,27 +54,21 @@ class ConversationViewSet(
         except Student.DoesNotExist:
             return Conversation.objects.none()
 
-    @action(detail=False, methods=['get'], url_path='my-conversation')
+    @action(detail=False, methods=['get'], url_path='my-conversation', permission_classes=[IsStudent])
     def my_conversation(self, request):
         """
-        A specific endpoint for students to get or create their conversation.
+        A specific endpoint for students to get-or-create their
+        dedicated conversation thread.
         """
-        
-        # --- THIS IS THE FIX ---
-        # Changed `request.user.is_student` to `request.user.is_staff`
-        if request.user.is_staff:
-             return Response({"detail": "Only students can access this."}, status=status.HTTP_403_FORBIDDEN)
-        # --- END FIX ---
-        
         try:
             student = request.user.student
         except Student.DoesNotExist:
              return Response({"detail": "Student profile not found."}, status=status.HTTP_404_NOT_FOUND)
         
-        # Get or create the conversation
+        # Get or create the conversation for this student
         conversation, created = Conversation.objects.get_or_create(student=student)
         
-        # When student views it, mark as read for them
+        # When student views it, mark messages as read for them
         conversation.mark_as_read_by(request.user)
         
         serializer = StudentConversationSerializer(conversation, context={'request': request})
@@ -69,43 +78,53 @@ class ConversationViewSet(
 class MessageViewSet(viewsets.GenericViewSet, mixins.CreateModelMixin, mixins.ListModelMixin):
     """
     ViewSet for listing and creating messages within a conversation.
-    Accessed via /api/v1/conversations/<conversation_pk>/messages/
+    Accessed via nested route:
+    /api/v1/conversations/<conversation_pk>/messages/
     """
     serializer_class = MessageSerializer
     permission_classes = [IsAuthenticated]
-
+    
     def get_conversation(self):
         """
-        Helper to get the parent conversation and check permissions.
+        Helper method to get the parent conversation from the URL
+        and verify the user has permission to access it.
         """
         conversation_id = self.kwargs.get('conversation_pk')
         user = self.request.user
         
         try:
-            conversation = Conversation.objects.get(pk=conversation_id)
+            conversation = Conversation.objects.select_related("student__user").get(pk=conversation_id)
         except Conversation.DoesNotExist:
             return None
             
         # Security check: User must be an admin OR the student in this conversation
-        if user.is_staff or conversation.student.user == user:
+        if user.is_staff or (hasattr(user, 'student') and conversation.student == user.student):
             return conversation
         
         return None
 
     def get_queryset(self):
+        """
+        Return messages only for the conversation specified in the URL.
+        """
         conversation = self.get_conversation()
         if conversation:
-            # Mark as read when messages are listed
+            # Mark as read when messages are listed by this user
             conversation.mark_as_read_by(self.request.user)
             return conversation.messages.select_related('sender').order_by('sent_at')
         return Message.objects.none()
 
     def get_serializer_context(self):
+        """Pass the conversation object to the serializer for context."""
         context = super().get_serializer_context()
         context['conversation'] = self.get_conversation()
         return context
 
     def create(self, request, *args, **kwargs):
+        """
+        Create a new message.
+        The sender is automatically set to request.user.
+        """
         conversation = self.get_conversation()
         if not conversation:
             return Response({"detail": "Conversation not found or access denied."}, status=status.HTTP_404_NOT_FOUND)

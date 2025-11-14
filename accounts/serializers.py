@@ -29,10 +29,13 @@ class UserSerializer(serializers.ModelSerializer):
     Serializer for viewing and updating User instances.
     Excludes password fields for security.
     """
+    # Read-only nested representation of the role
     role = RoleSerializer(read_only=True, allow_null=True)
+    # Write-only field to update the role by its ID
     role_id = serializers.PrimaryKeyRelatedField(
-        queryset=Role.objects.all(), source="role", write_only=True, required=False
+        queryset=Role.objects.all(), source="role", write_only=True, required=False, allow_null=True
     )
+    # Read-only field to show the associated student ID, if one exists
     student_id = serializers.ReadOnlyField(source='student.id', allow_null=True)
 
     class Meta:
@@ -42,6 +45,8 @@ class UserSerializer(serializers.ModelSerializer):
             "phone", "address", "role", "role_id", "is_active", 
             "is_staff", "is_superuser", "student_id",
         ]
+        # Password is not included for reads/updates
+        # is_superuser is set at the DB level, not via API
         read_only_fields = ["id", "is_superuser", "student_id"] 
 
 
@@ -76,7 +81,8 @@ class UserCreateSerializer(serializers.ModelSerializer):
 class StudentUserCreateSerializer(serializers.ModelSerializer):
     """
     Serializer for creating a new user tied to a Student profile.
-    Ensures 'is_staff' and 'is_superuser' are always False.
+    This is used by the StudentSerializer to create a User and Student
+    in one step. It ensures 'is_staff' and 'is_superuser' are always False.
     """
     role_id = serializers.PrimaryKeyRelatedField(
         queryset=Role.objects.all(), source="role", write_only=True, required=False, allow_null=True
@@ -153,7 +159,7 @@ class PasswordResetRequestSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
 
     def validate_email(self, value):
-        """Ensure a user exists with the provided email."""
+        """Ensure an active user exists with the provided email."""
         if not User.objects.filter(email__iexact=value, is_active=True).exists():
             raise serializers.ValidationError("No active user found with this email address.")
         return value

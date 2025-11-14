@@ -12,6 +12,7 @@ from django.utils.timezone import now
 def health_check(request):
     """
     A lightweight, public endpoint to verify that the API is running.
+    Useful for load balancers, uptime monitors, etc.
     """
     return Response({
         "status": "ok",

@@ -2,7 +2,7 @@
 URL configuration for the 'accounts' app.
 
 Registers ViewSets for Roles, Users, and User History,
-and adds paths for password reset functionality.
+and adds custom paths for password reset functionality.
 """
 
 from rest_framework.routers import DefaultRouter

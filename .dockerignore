@@ -1,19 +1,29 @@
-#
-# NEW FILE: stitching-backend/.dockerignore
-#
+# Exclude files and directories from the Docker build context
+# to speed up the build and keep the image clean.
+
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+
+# Local environment
 .Python
 .env
 .venv
 env/
 venv/
 ENV/
+
+# Local database
 db.sqlite3
 db.sqlite3-journal
+
+# Git
 .git
 .gitignore
+
+# User-uploaded media and collected static files
+# These should be handled by volumes or external storage
 media/
 staticfiles/

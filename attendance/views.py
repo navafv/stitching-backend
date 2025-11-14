@@ -1,8 +1,9 @@
 """
 Views for the 'attendance' app.
 
-Provides API endpoints for staff to manage attendance records
-and for students to view their own attendance history.
+Provides API endpoints for:
+- Staff to manage attendance records (CRUD).
+- Students to view their own attendance history.
 """
 
 from rest_framework import viewsets
@@ -15,8 +16,8 @@ from students.models import Student
 
 class AttendanceViewSet(viewsets.ModelViewSet):
     """
-    API endpoint for staff to create, read, update, and delete attendance records.
-    Read-only for non-staff users (if any permission).
+    API endpoint for staff to create, read, update, and delete
+    daily attendance records.
     """
     queryset = (
         Attendance.objects
@@ -34,6 +35,7 @@ class AttendanceViewSet(viewsets.ModelViewSet):
 class StudentAttendanceViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Read-only endpoint for a student to view their own attendance history.
+    Accessed via /api/v1/attendance/my-history/
     """
     serializer_class = StudentAttendanceEntrySerializer
     permission_classes = [IsStudent] # Only students can access this
@@ -58,6 +60,4 @@ class StudentAttendanceViewSet(viewsets.ReadOnlyModelViewSet):
             )
         except Student.DoesNotExist:
             # If user is not a student, return an empty queryset
-            return AttendanceEntry.objects.none()
-        except Exception:
             return AttendanceEntry.objects.none()

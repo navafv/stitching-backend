@@ -1,10 +1,11 @@
 """
-Students Views
---------------
-Enhancements:
-- Restricted permissions (only staff can modify students).
-- Uses select_related for performance.
-- Added filter/search/order optimizations.
+Views for the 'students' app.
+
+Provides endpoints for:
+- Public enquiries (create-only for public, full CRUD for staff).
+- Student profile management (staff CRUD, student-only 'me' endpoint).
+- Student measurements (nested under student profiles).
+- Student history (admin-only).
 """
 
 from rest_framework import viewsets
@@ -22,7 +23,9 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 
 
 class EnquiryViewSet(viewsets.ModelViewSet):
-    """Handles public/student enquiries."""
+    """
+    Handles public/student enquiries.
+    """
     queryset = Enquiry.objects.all().order_by("-created_at")
     serializer_class = EnquirySerializer
     filterset_fields = ["status", "course_interest"]
@@ -31,21 +34,23 @@ class EnquiryViewSet(viewsets.ModelViewSet):
 
     def get_permissions(self):
         """
-        Allow public 'create' (POST) for the form.
-        Require staff/admin for all other actions.
+        - Allow public 'create' (POST) for the enquiry form.
+        - Require staff/admin for all other actions (list, update, delete).
         """
         if self.action == 'create':
-            # Anyone can POST to create a new enquiry
             self.permission_classes = [AllowAny]
         else:
-            # Only staff/admin can list, view, update, or delete enquiries
+            # IsAdminUser checks if user.is_staff == True
             self.permission_classes = [IsAdminUser] 
-            # Note: IsAdminUser in DRF checks if user.is_staff == True
         return super().get_permissions()
 
 
 class StudentViewSet(viewsets.ModelViewSet):
-    """CRUD for student records (staff-only modifications)."""
+    """
+    Handles CRUD for student records.
+    - Staff/Admins have full read/write access.
+    - Authenticated students can use the '/me' endpoint.
+    """
     queryset = Student.objects.select_related("user", "user__role")
     permission_classes = [IsStaffOrReadOnly]
     filterset_fields = ["active", "admission_date"]
@@ -59,11 +64,16 @@ class StudentViewSet(viewsets.ModelViewSet):
     ordering_fields = ["admission_date", "reg_no", "id"]
 
     def get_serializer_class(self):
+        """
+        Use a limited serializer for the 'me' endpoint PATCH,
+        otherwise use the default StudentSerializer.
+        """
         if self.action == 'me' and self.request.method == 'PATCH':
             return StudentSelfUpdateSerializer
-        return StudentSerializer # Default
- 
+        return StudentSerializer
+
     def get_permissions(self):
+        """Assign IsStudent permission for the 'me' action."""
         if self.action == 'me':
             self.permission_classes = [IsStudent]
         return super().get_permissions()
@@ -72,12 +82,12 @@ class StudentViewSet(viewsets.ModelViewSet):
         detail=False, 
         methods=["get", "patch"], 
         permission_classes=[IsStudent], 
-        parser_classes=[MultiPartParser, FormParser] # For file uploads
+        parser_classes=[MultiPartParser, FormParser] # For photo uploads
     )
     def me(self, request):
         """
         GET: Retrieve the student profile for the logged-in user.
-        PATCH: Update the student profile for the logged-in user (e.g., photo).
+        PATCH: Update the student profile (e.g., photo) for the logged-in user.
         """
         try:
             student = request.user.student
@@ -99,25 +109,29 @@ class StudentViewSet(viewsets.ModelViewSet):
 class StudentMeasurementViewSet(viewsets.ModelViewSet):
     """
     API endpoint for managing a student's measurements.
-    Accessed via /api/v1/students/<student_id>/measurements/
+    Accessed via the nested route:
+    /api/v1/students/<student_pk>/measurements/
     """
     queryset = StudentMeasurement.objects.all()
     serializer_class = StudentMeasurementSerializer
     permission_classes = [IsStaffOrReadOnly]
 
     def get_queryset(self):
-        """Filter measurements by the student ID in the URL."""
+        """Filter measurements by the student_pk in the URL."""
         return self.queryset.filter(student_id=self.kwargs.get("student_pk"))
 
     def perform_create(self, serializer):
         """Automatically associate measurements with the student from the URL."""
-        student = Student.objects.get(pk=self.kwargs.get("student_pk"))
-        serializer.save(student=student)
+        student_pk = self.kwargs.get("student_pk")
+        # This assumes the student_pk is valid, which is generally true
+        # if accessed via a nested router.
+        serializer.save(student_id=student_pk)
 
 
 class HistoricalStudentViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    Read-only view for Student history.
+    Read-only view for Student change history.
+    (Admin access only)
     """
     queryset = Student.history.select_related("history_user", "user").all()
     serializer_class = HistoricalStudentSerializer

@@ -1,123 +1,80 @@
-✅ Current Django Backend — Completed and Functional
+# Noor Stitching Institute - Backend
 
-You’ve implemented a full-stack, modular, and scalable system with:
+This is the complete Django backend for the Noor Stitching Institute management system. It provides a robust, scalable API to manage all aspects of the institute.
 
-🧩 1. Core System (✅ Completed)
+## Features
 
-Modular apps: accounts, students, courses, attendance, finance, certificates, api, core
+* **👤 Accounts & Roles**: Custom User model with Role-based permissions (Admin, Staff, Student).
+* **🎓 Students & Enquiries**: Manages the full student lifecycle from initial enquiry to active student profile, including measurements.
+* **📚 Courses & Batches**: Handles course curriculum, trainer profiles, batch scheduling, and student enrollments.
+* **📅 Attendance**: Tracks daily student attendance per batch, with logic to automatically mark enrollments as "completed" upon meeting requirements.
+* **💵 Finance**: Complete financial tracking, including:
+    * Fee Receipts (with PDF generation)
+    * Expense Tracking
+    * Trainer Payroll Management
+    * Inventory (Stock Items & Transactions)
+    * Financial Analytics (Profit/Loss, etc.)
+    * Outstanding Fee Reports
+* **🪪 Certificates**: Issues, manages, and revokes student certificates. Includes automatic PDF generation and a public QR-code verification endpoint.
+* **💬 Messaging**: A one-to-one chat system between students and the admin team, with read-status tracking.
+* **🔔 Notifications**: A system for admins to send bulk notifications to all users, specific roles, or individual users.
+* **🎉 Events**: A simple broadcast system for institute-wide events (e.g., holidays).
+* **🔐 Authentication**: Secure JWT (JSON Web Token) authentication.
+* **📄 API Documentation**: Automatic OpenAPI (Swagger/Redoc) schema generation.
+* **🚀 Production Ready**: Configured with Gunicorn, Whitenoise, Sentry, and environment variables for production deployment.
 
-Custom user model with roles
+## Tech Stack
 
-JWT authentication (rest_framework_simplejwt)
+* **Backend**: Django, Django REST Framework
+* **Database**: PostgreSQL (Production), SQLite3 (Development)
+* **Authentication**: djangorestframework-simplejwt (JWT)
+* **API Docs**: drf-spectacular
+* **PDF Generation**: xhtml2pdf
+* **Deployment**: Docker, Gunicorn, Whitenoise
+* **History Tracking**: django-simple-history
 
-Swagger / Redoc API docs (via drf-spectacular)
+## Setup & Installation
 
-CORS & CSRF setup for React frontend
+1.  **Clone the repository:**
+    ```bash
+    git clone [https://github.com/navafv/noor-backend.git](https://github.com/navafv/noor-backend.git)
+    cd noor-backend
+    ```
 
-Pagination, filtering, search, ordering
+2.  **Create a virtual environment and activate it:**
+    ```bash
+    python -m venv venv
+    source venv/bin/activate
+    # On Windows: venv\Scripts\activate
+    ```
 
-Celery + Redis integration (background tasks & periodic jobs)
+3.  **Install dependencies:**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-Django Celery Beat for scheduled tasks (like daily checks)
+4.  **Setup environment variables:**
+    * Copy `.env.example` to a new file named `.env`.
+    * Fill in the required values. A `DJANGO_SECRET_KEY` is mandatory.
+    ```bash
+    cp .env.example .env
+    nano .env
+    ```
 
-Static & media setup
+5.  **Run database migrations:**
+    ```bash
+    python manage.py migrate
+    ```
 
-Secure permissions (staff/admin/read-only separation)
+6.  **Create a superuser (Admin):**
+    ```bash
+    python manage.py createsuperuser
+    ```
 
-Logging, throttling, email backend
+7.  **Run the development server:**
+    ```bash
+    python manage.py runserver
+    ```
 
-👤 2. Accounts App (✅ Completed)
-
-Role-based user system
-
-Custom User model with role, phone, address
-
-Admin, serializer, and ViewSets with proper restrictions
-
-Ready for user management from admin or API
-
-🎓 3. Students App (✅ Completed)
-
-Enquiries and Students models
-
-Nested user creation for students
-
-Secure CRUD endpoints
-
-Filtering by status, admission date, etc.
-
-Used across attendance, enrollment, and finance
-
-📚 4. Courses App (✅ Completed)
-
-Courses, Trainers, Batches, and Enrollment
-
-Linked trainers (via User)
-
-Nested relationships and search
-
-Supports assigning trainers and tracking batches
-
-💵 5. Finance App (✅ Completed)
-
-Fees Receipts with locking & permissions
-
-Expenses with category tracking
-
-Payroll management for trainers
-
-Automatic user assignment (posted_by, added_by)
-
-✅ Finance Analytics and Outstanding Fees API already implemented
-
-Ready for dashboards and visual charts
-
-📅 6. Attendance App (✅ Completed)
-
-Attendance + AttendanceEntry models
-
-Nested serializer for entries
-
-Batch and student linkage
-
-Smart replace logic on updates
-
-Fully API-driven (React-compatible)
-
-🪪 7. Certificates App (✅ Completed)
-
-Certificates issued to students per course
-
-Auto UUID-based verification (qr_hash)
-
-Admin management
-
-Supports revocation and remarks
-
-🔄 Optional: async certificate PDF/QR generation with Celery (ready to add later)
-
-🌐 8. API Layer (✅ Completed)
-
-Central router for all apps
-
-JWT auth endpoints
-
-Permissions system (IsAdminOrReadOnly, IsStaffOrReadOnly, IsSelfOrAdmin)
-
-Swagger + Redoc docs
-
-Health check endpoint
-
-Ready for auto TypeScript client generation
-
-⚙️ 9. Core Project (✅ Completed)
-
-Clean, production-ready settings
-
-Redis + Celery integration
-
-OpenAPI documentation routes
-
-Versioned API structure (/api/v1/)
-
-Logging, throttling, and environment readiness
+The API will be available at `http://127.0.0.1:8000/`.
+API documentation will be at `http://127.0.0.1:8000/api/docs/`.

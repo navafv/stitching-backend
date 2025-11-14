@@ -1,11 +1,8 @@
 """
-Courses Serializers
--------------------
-Enhancements:
-- Added validation and nested display fields.
-- Added atomic enrollment creation with capacity checks.
-- Added 'has_feedback' field to EnrollmentSerializer.
-- NEW: Added CourseMaterialSerializer.
+Serializers for the 'courses' app.
+
+Handles validation and data transformation for Course, Trainer, Batch,
+Enrollment, Feedback, and CourseMaterial models.
 """
 
 from django.db import transaction
@@ -46,13 +43,20 @@ class BatchSerializer(serializers.ModelSerializer):
 
 
 class EnrollmentSerializer(serializers.ModelSerializer):
-    """Serializer for Enrollment model with validation."""
+    """
+    Serializer for Enrollment model.
+    Includes business logic for validation and computed fields.
+    """
     student_name = serializers.ReadOnlyField(source="student.user.get_full_name")
     batch_code = serializers.ReadOnlyField(source="batch.code")
     course_title = serializers.ReadOnlyField(source="batch.course.title")
-    has_feedback = serializers.SerializerMethodField()
-    course_id = serializers.ReadOnlyField(source="batch.course.id") 
+    course_id = serializers.ReadOnlyField(source="batch.course.id")
     completion_date = serializers.DateField(read_only=True)
+    
+    # Check if student has already submitted feedback
+    has_feedback = serializers.SerializerMethodField()
+    
+    # Compute attendance progress
     present_days = serializers.SerializerMethodField()
     required_days = serializers.SerializerMethodField()
 
@@ -67,26 +71,32 @@ class EnrollmentSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "enrolled_on"]
     
     def get_present_days(self, obj):
+        """Returns the student's total present days for this course."""
         return obj.get_present_days_count()
 
     def get_required_days(self, obj):
+        """Returns the course's attendance requirement."""
         return obj.batch.course.required_attendance_days
 
     def get_has_feedback(self, obj):
-        # Check if the one-to-one reverse relation exists
+        """Checks if a related BatchFeedback object exists."""
         return hasattr(obj, 'feedback')
 
     @transaction.atomic
     def create(self, validated_data):
-        """Prevent enrolling student into full or duplicate batch."""
+        """
+        Validates enrollment creation.
+        1. Prevents enrolling in a full batch.
+        2. Prevents duplicate enrollment in the same batch.
+        """
         batch = validated_data["batch"]
         student = validated_data["student"]
 
-        # Capacity check
+        # 1. Capacity check
         if batch.is_full():
             raise serializers.ValidationError("Batch capacity reached.")
 
-        # Duplicate check
+        # 2. Duplicate check
         if Enrollment.objects.filter(student=student, batch=batch).exists():
             raise serializers.ValidationError("Student already enrolled in this batch.")
 
@@ -94,6 +104,9 @@ class EnrollmentSerializer(serializers.ModelSerializer):
 
 
 class BatchFeedbackSerializer(serializers.ModelSerializer):
+    """
+    Serializer for creating and viewing BatchFeedback.
+    """
     student_name = serializers.ReadOnlyField(source="enrollment.student.user.get_full_name")
     batch_code = serializers.ReadOnlyField(source="enrollment.batch.code")
 
@@ -107,64 +120,70 @@ class BatchFeedbackSerializer(serializers.ModelSerializer):
 
     def validate_enrollment(self, enrollment):
         """
-        Check if the feedback is from the currently logged-in user.
+        Validates feedback submission.
+        1. Ensures the user submitting is the student on the enrollment.
+        2. (Optional) Ensures the course is 'completed'.
+        3. Ensures feedback hasn't already been submitted.
         """
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
             raise serializers.ValidationError("Authentication required.")
         
+        # 1. Check ownership
         if enrollment.student.user != request.user:
             raise serializers.ValidationError("You can only submit feedback for your own enrollments.")
         
+        # 2. Check if course is completed
         if enrollment.status != "completed":
-            # Optional: only allow feedback on completed courses
+            # This is an optional business rule.
             raise serializers.ValidationError("Feedback can only be submitted for completed batches.")
             
+        # 3. Check for duplicates
         if BatchFeedback.objects.filter(enrollment=enrollment).exists():
             raise serializers.ValidationError("Feedback has already been submitted for this enrollment.")
             
         return enrollment
 
 
-# --- UPDATED SERIALIZER ---
 class CourseMaterialSerializer(serializers.ModelSerializer):
     """
     Serializer for uploading and viewing course materials.
+    Handles 'file' vs 'link' validation.
     """
     course_title = serializers.ReadOnlyField(source="course.title")
 
     class Meta:
         model = CourseMaterial
-        # --- FIX: Removed 'course' from this list ---
         fields = [
             "id", "course_title", "title", "description",
             "file", "link", "uploaded_at"
         ]
         read_only_fields = ["id", "uploaded_at", "course_title"]
-        # --- END FIX ---
 
     def validate(self, attrs):
-        # Ensure either file or link is provided
-        file = attrs.get("file")
-        link = attrs.get("link")
+        """
+        Ensures either 'file' or 'link' is provided, but not both.
+        """
+        # Get the final state of file/link fields
+        file = attrs.get("file", getattr(self.instance, 'file', None))
+        link = attrs.get("link", getattr(self.instance, 'link', None))
         
-        # On create
-        if not self.instance:
-            if not file and not link:
-                raise serializers.ValidationError("Must provide either a file or a link.")
-            if file and link:
-                raise serializers.ValidationError("Cannot provide both a file and a link.")
-        
-        # On update (patch)
-        if self.instance:
-            if file and (link or self.instance.link):
-                raise serializers.ValidationError("Cannot provide both a file and a link.")
-            if link and (file or self.instance.file):
-                raise serializers.ValidationError("Cannot provide both a file and a link.")
+        # Handle exclusive-or logic
+        if not file and not link:
+            raise serializers.ValidationError("Must provide either a file or a link.")
+        if file and link:
+            raise serializers.ValidationError("Cannot provide both a file and a link.")
 
         return attrs
 
     def create(self, validated_data):
-        # 'course' will be provided from the nested URL, not the request body
-        validated_data['course_id'] = self.context['view'].kwargs['course_pk']
+        """
+        Automatically assigns the 'course' from the nested URL
+        (e.g., /courses/<course_pk>/materials/).
+        """
+        course_pk = self.context['view'].kwargs.get('course_pk')
+        if not course_pk:
+            raise serializers.ValidationError("Course ID not found in URL context.")
+            
+        validated_data['course_id'] = course_pk
         return super().create(validated_data)

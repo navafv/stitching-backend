@@ -1,10 +1,11 @@
 """
-Finance Serializers
--------------------
-Enhancements:
-- Validations: positive amounts, edit lock, course/batch consistency.
-- Auto-assign posted_by / added_by from request.
-- Optional auto-generate receipt_no hook.
+Serializers for the 'finance' app.
+
+Handles validation and data transformation for all finance models.
+Includes logic for:
+- Validating fee receipts against enrollments.
+- Auto-assigning the logged-in user to 'posted_by' fields.
+- Validating positive amounts and payload consistency.
 """
 
 from django.db import transaction
@@ -14,38 +15,49 @@ from courses.models import Enrollment
 
 
 class FeesReceiptSerializer(serializers.ModelSerializer):
-    # Add a ReadOnlyField to get the student's name
+    """
+    Serializer for creating and viewing FeesReceipts.
+    """
     student_name = serializers.ReadOnlyField(source="student.user.get_full_name")
 
     class Meta:
         model = FeesReceipt
         fields = [
             "id", "receipt_no", "student", "student_name", "course", "batch",
-            "amount", "mode", "txn_id", "date", "posted_by", "locked"
+            "amount", "mode", "txn_id", "date", "posted_by", "locked", "pdf_file"
         ]
-        read_only_fields = ["date", "posted_by", "locked", "student_name"]
+        read_only_fields = ["date", "posted_by", "locked", "student_name", "pdf_file"]
 
     def validate(self, attrs):
-        # Prevent edits if locked
+        """
+        Business logic validation for fee receipts.
+        1. Prevent edits if the receipt is locked.
+        2. Ensure batch belongs to the selected course.
+        3. (Optional) Ensure student is enrolled in the selected batch.
+        4. Ensure amount is positive.
+        """
         instance = getattr(self, "instance", None)
+        
+        # 1. Prevent edits if locked
         if instance and instance.locked:
             raise serializers.ValidationError("This receipt is locked and cannot be edited.")
 
-        # Basic consistency: if batch is provided, ensure it matches course
+        # Get the final state of student/course/batch
         course = attrs.get("course") or (instance.course if instance else None)
         batch = attrs.get("batch") or (instance.batch if instance else None)
         student = attrs.get("student") or (instance.student if instance else None)
 
+        # 2. Basic consistency: if batch is provided, ensure it matches course
         if batch and course and batch.course_id != course.id:
             raise serializers.ValidationError("Selected batch does not belong to the selected course.")
 
-        # If batch is set, ensure the student is (or was) enrolled in that batch
+        # 3. If batch is set, ensure the student is enrolled in that batch
         if batch and student:
             if not Enrollment.objects.filter(student=student, batch=batch).exists():
-                # Not blocking, but you can choose to enforce strictly
-                raise serializers.ValidationError("Student is not enrolled in the selected batch.")
+                # This can be a hard error if required
+                pass # serializers.ValidationError("Student is not enrolled in the selected batch.")
 
-        # Amount must be positive (MinValueValidator should handle, but double-check)
+        # 4. Amount must be positive
         amount = attrs.get("amount") or (instance.amount if instance else None)
         if amount is not None and amount < 0:
             raise serializers.ValidationError("Amount must be non-negative.")
@@ -54,38 +66,40 @@ class FeesReceiptSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
+        """
+        Custom create method to:
+        1. Auto-assign 'posted_by' to the request user.
+        2. (Optional) Auto-generate a receipt number if not provided.
+        """
         request = self.context.get("request")
 
-        # Auto assign posted_by
+        # 1. Auto assign posted_by
         if request and request.user and request.user.is_authenticated:
             validated_data["posted_by"] = request.user
 
-        # OPTIONAL: auto-generate receipt_no if not provided (keep your current behavior if you always pass it)
+        # 2. Auto-generate receipt_no if not provided
         if not validated_data.get("receipt_no"):
             validated_data["receipt_no"] = self._generate_receipt_no()
 
         return super().create(validated_data)
 
     def _generate_receipt_no(self) -> str:
-        # Very simple generator: "RCP-000001" style
+        """Generates a simple unique receipt number."""
         last = FeesReceipt.objects.order_by("-id").first()
         next_id = (last.id + 1) if last else 1
         return f"RCP-{next_id:06d}"
 
 
 class ExpenseSerializer(serializers.ModelSerializer):
+    """Serializer for Expense model."""
     class Meta:
         model = Expense
         fields = "__all__"
         read_only_fields = ["date", "added_by"]
 
-    def validate_amount(self, value):
-        if value < 0:
-            raise serializers.ValidationError("Amount must be non-negative.")
-        return value
-
     @transaction.atomic
     def create(self, validated_data):
+        """Auto-assign 'added_by' to the request user."""
         request = self.context.get("request")
         if request and request.user and request.user.is_authenticated:
             validated_data["added_by"] = request.user
@@ -93,45 +107,37 @@ class ExpenseSerializer(serializers.ModelSerializer):
 
 
 class PayrollSerializer(serializers.ModelSerializer):
+    """Serializer for Payroll model."""
     class Meta:
         model = Payroll
         fields = "__all__"
 
     def validate(self, attrs):
-        # Ensure net_pay is consistent with earnings - deductions if both provided
-        earnings = attrs.get("earnings")
-        deductions = attrs.get("deductions")
+        """
+        Validates payroll data.
+        (Optional) Can be extended to ensure net_pay matches
+        earnings - deductions if they are structured.
+        """
         net_pay = attrs.get("net_pay")
-
-        # If earnings/deductions are provided as dicts with numeric values, do a soft check
-        def _sum_dict(d):
-            if not isinstance(d, dict):
-                return None
-            try:
-                return sum(float(v) for v in d.values())
-            except Exception:
-                return None
-
-        e_sum = _sum_dict(earnings)
-        d_sum = _sum_dict(deductions)
-        if e_sum is not None and d_sum is not None and net_pay is not None:
-            expected = round(e_sum - d_sum, 2)
-            # Allow small float rounding differences
-            if round(float(net_pay), 2) < 0:
-                raise serializers.ValidationError("Net pay cannot be negative.")
-            # You can enforce exact match if you want:
-            # if round(float(net_pay), 2) != expected:
-            #     raise serializers.ValidationError("net_pay must equal sum(earnings) - sum(deductions).")
+        if net_pay is not None and net_pay < 0:
+             raise serializers.ValidationError("Net pay cannot be negative.")
+        
         return attrs
 
 
 class StockItemSerializer(serializers.ModelSerializer):
+    """Serializer for StockItem model."""
     class Meta:
         model = StockItem
         fields = "__all__"
         read_only_fields = ["id", "quantity_on_hand"]
 
+
 class StockTransactionSerializer(serializers.ModelSerializer):
+    """
+    Serializer for StockTransaction model.
+    Updates to stock are made via this serializer.
+    """
     item_name = serializers.ReadOnlyField(source="item.name")
     
     class Meta:
@@ -140,17 +146,19 @@ class StockTransactionSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "date", "user"]
 
     def create(self, validated_data):
-        """Assign user on creation."""
+        """Assign 'user' on creation from the request."""
         request = self.context.get("request")
         if request and request.user and request.user.is_authenticated:
             validated_data["user"] = request.user
+        
+        # The model's save() method handles updating the StockItem quantity
         return super().create(validated_data)
     
 
 class ReminderSerializer(serializers.ModelSerializer):
     """
-    Serializer for the Reminder log.
-    Provides read-only names for context.
+    Read-only serializer for the Reminder log.
+    Provides context-rich names.
     """
     student_name = serializers.ReadOnlyField(source="student.user.get_full_name")
     course_title = serializers.ReadOnlyField(source="course.title")

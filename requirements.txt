@@ -1,4 +1,7 @@
+# Django Framework
 Django==5.2.8
+
+# Django REST Framework
 djangorestframework==3.16.1
 django-filter==25.2
 drf-spectacular==0.29.0
@@ -6,14 +9,24 @@ drf-spectacular-sidecar==2025.10.1
 djangorestframework_simplejwt==5.5.1
 django-cors-headers==4.9.0
 drf-nested-routers==0.95.0
+
+# Model History & Utilities
 django-simple-history==3.10.1
 Pillow==12.0.0
+
+# Testing
 pytest==8.4.2
 pytest-django==4.11.1
 model-bakery==1.20.5
+
+# Deployment & Production
 gunicorn==23.0.0
 psycopg2-binary==2.9.11
 dj-database-url==3.0.1
 whitenoise==6.11.0
+
+# Error Tracking
 sentry-sdk==2.43.0
+
+# PDF Generation
 xhtml2pdf==0.2.17

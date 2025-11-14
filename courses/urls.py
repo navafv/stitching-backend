@@ -1,6 +1,8 @@
 """
-UPDATED FILE: stitching-backend/courses/urls.py
-Registered the new ViewSets for Course Materials.
+URL configuration for the 'courses' app.
+
+Registers standard ViewSets and a nested ViewSet for course materials
+using `rest_framework_nested`.
 """
 from rest_framework_nested import routers
 from .views import (
@@ -16,11 +18,11 @@ router.register(r"batches", BatchViewSet, basename="batch")
 router.register(r"enrollments", EnrollmentViewSet, basename="enrollment")
 router.register(r"feedback", BatchFeedbackViewSet, basename="feedback")
 
-# --- NEW ROUTE for students ---
+# Student-facing endpoint for their materials
 router.register(r"my-materials", StudentMaterialsViewSet, basename="my-materials")
 
-# --- NEW NESTED ROUTE for admins ---
-# Creates /courses/<course_pk>/materials/
+# --- Nested Route for Admin ---
+# Creates /api/v1/courses/<course_pk>/materials/
 courses_router = routers.NestedSimpleRouter(router, r'courses', lookup='course')
 courses_router.register(r'materials', CourseMaterialViewSet, basename='course-materials')
 

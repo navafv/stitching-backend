@@ -1,9 +1,5 @@
 """
-Students Admin
---------------
-Enhancements:
-- Readable admin list view.
-- Filters and search fields optimized for common lookups.
+Admin configuration for the 'students' app.
 """
 
 from django.contrib import admin
@@ -11,9 +7,9 @@ from .models import Enquiry, Student, StudentMeasurement
 
 
 class StudentMeasurementInline(admin.TabularInline):
-    """Allows editing measurements inline from the Student admin page."""
+    """Allows editing measurements directly from the Student admin page."""
     model = StudentMeasurement
-    extra = 1
+    extra = 1 # Show one empty form
     ordering = ("-date_taken",)
 
 
@@ -37,6 +33,7 @@ class StudentAdmin(admin.ModelAdmin):
         "guardian_name",
         "guardian_phone",
     )
+    # reg_no is auto-generated or set on create, not edited
     readonly_fields = ("reg_no",)
     ordering = ("-admission_date",)
     inlines = [StudentMeasurementInline]

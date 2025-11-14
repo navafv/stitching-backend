@@ -8,14 +8,12 @@ providing a customized interface for managing users and roles.
 from django.contrib import admin
 from .models import Role, User
 
-
 @admin.register(Role)
 class RoleAdmin(admin.ModelAdmin):
     """Admin interface customization for the Role model."""
     list_display = ("id", "name", "description")
     search_fields = ("name",)
     ordering = ("name",)
-
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
@@ -31,6 +29,7 @@ class UserAdmin(admin.ModelAdmin):
     readonly_fields = ("last_login", "date_joined")
     ordering = ("username",)
 
+    # Organize the admin detail view into sections
     fieldsets = (
         ("Basic Info", {"fields": ("username", "email", "password")}),
         ("Personal Details", {"fields": ("first_name", "last_name", "phone", "address")}),

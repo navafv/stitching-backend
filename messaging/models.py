@@ -1,16 +1,25 @@
+"""
+Data models for the 'messaging' app.
+
+Defines:
+- Conversation: A 1-to-1 thread between a Student and the Admin team.
+- Message: A single message within a Conversation.
+"""
+
 from django.db import models
 from django.conf import settings
 from students.models import Student
 
 class Conversation(models.Model):
     """
-    Represents a messaging thread between a single student and the admin team.
+    Represents a single messaging thread between one student
+    and the admin team.
     """
     student = models.OneToOneField(Student, on_delete=models.CASCADE, related_name="conversation")
     created_at = models.DateTimeField(auto_now_add=True)
     last_message_at = models.DateTimeField(auto_now=True)
     
-    # Track read status for both student and admin
+    # Tracks read status for both parties
     student_read = models.BooleanField(default=True)
     admin_read = models.BooleanField(default=True)
 
@@ -23,20 +32,30 @@ class Conversation(models.Model):
         return f"Conversation with {self.student.user.get_full_name()}"
 
     def mark_as_read_by(self, user):
-        """Mark the conversation as read by either the student or an admin."""
-        if not user.is_staff: # User is a student
+        """
+        Marks the conversation as read by the user (student or admin)
+        who is currently viewing it.
+        """
+        if not user.is_staff: # User is the student
             self.student_read = True
-        else: # User is admin
+        else: # User is an admin
             self.admin_read = True
         self.save(update_fields=["student_read", "admin_read"])
 
-    def mark_as_unread_for(self, user_type):
-        """Mark as unread for the *other* party."""
-        if user_type == 'student': # Message sent by student
+    def mark_as_unread_for(self, sender_type: str):
+        """
+        Marks the conversation as unread for the *recipient*.
+        Called by the Message.save() signal.
+        
+        Args:
+            sender_type: 'student' or 'admin'
+        """
+        if sender_type == 'student': # Message sent by student
             self.admin_read = False
+            self.save(update_fields=["admin_read"])
         else: # Message sent by admin
             self.student_read = False
-        self.save(update_fields=["student_read", "admin_read"])
+            self.save(update_fields=["student_read"])
 
 
 class Message(models.Model):
@@ -58,15 +77,12 @@ class Message(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        On save, update the conversation's last_message_at timestamp
-        and set the unread status for the recipient.
+        On save, update the conversation's unread status for the recipient.
+        The 'last_message_at' timestamp on the Conversation model is
+        updated automatically via its 'auto_now=True' setting.
         """
-        # Determine who the recipient is to set unread status
-        user_type = 'student' if not self.sender.is_staff else 'admin'
-        self.conversation.mark_as_unread_for(user_type)
-        
-        # We don't need to manually update last_message_at
-        # because the Conversation model's field is auto_now=True
-        # self.conversation.save() 
+        # Determine who the sender is to set unread status for the *other* party
+        sender_type = 'student' if not self.sender.is_staff else 'admin'
+        self.conversation.mark_as_unread_for(sender_type)
         
         super().save(*args, **kwargs)

@@ -12,8 +12,14 @@ from .views import AttendanceViewSet, StudentAttendanceViewSet
 from .views_analytics import AttendanceAnalyticsViewSet
 
 router = DefaultRouter()
+
+# e.g., /api/v1/attendance/records/
 router.register("records", AttendanceViewSet, basename="attendance")
+
+# e.g., /api/v1/attendance/analytics/batch/1/
 router.register("analytics", AttendanceAnalyticsViewSet, basename="attendance-analytics")
+
+# e.g., /api/v1/attendance/my-history/
 router.register("my-history", StudentAttendanceViewSet, basename="my-attendance-history")
 
 urlpatterns = router.urls

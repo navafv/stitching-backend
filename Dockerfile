@@ -1,47 +1,54 @@
 #
-# NEW FILE: stitching-backend/Dockerfile
-# This file builds the Django application for production.
+# Dockerfile for the Django application (Production)
+# This uses a multi-stage build to keep the final image slim.
 #
 
-# Stage 1: Build stage
+# --- Stage 1: Builder ---
+# This stage installs build-time dependencies and Python packages
 FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
-# Install build dependencies
+# Install system dependencies required for building Python packages
+# (e.g., libpq-dev for psycopg2)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     build-essential \
     libpq-dev \
-    # WeasyPrint dependencies REMOVED
     && rm -rf /var/lib/apt/lists/*
 
-# Install python dependencies
+# Install Python dependencies
 COPY requirements.txt .
 RUN pip_no_cache_dir=off pip install --upgrade pip
-RUN pip_no_cache_dir=off pip install -r requirements.txt # <-- MISTAKE IN ORIGINAL, fixed to requirements.txt
+RUN pip_no_cache_dir=off pip install -r requirements.txt
 
-# Stage 2: Final stage
+
+# --- Stage 2: Final Image ---
+# This stage builds the final, lightweight runtime image
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install runtime dependencies
+# Install only runtime system dependencies (if any)
+# We remove WeasyPrint dependencies as it's replaced by xhtml2pdf
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    # WeasyPrint runtime dependencies REMOVED
     && rm -rf /var/lib/apt/lists/*
 
-# Copy installed python packages from builder stage
+# Copy installed Python packages from the builder stage
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
-# Copy application code
+# Copy the application code into the final image
 COPY . .
 
-# Create directories for media and static files
+# Create directories for media and static files (if they don't exist)
+# These will typically be mounted as volumes in production.
 RUN mkdir -p /app/media /app/staticfiles
 
-# Gunicorn will be the entrypoint
+# Expose the port Gunicorn will run on
 EXPOSE 8000
+
+# Run the application using Gunicorn
+# Binds to all interfaces on port 8000
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "core.wsgi:application"]

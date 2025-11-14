@@ -1,13 +1,28 @@
-# ... (imports are unchanged) ...
+"""
+Data models for the 'finance' app.
+
+Defines all financial entities:
+- FeesReceipt: Records a student's fee payment.
+- Expense: Records an operational expense for the institute.
+- Payroll: Records a salary payment to a Trainer.
+- Reminder: Logs a fee reminder sent to a student.
+- StockItem: Represents an inventory item (e.g., fabric, thread).
+- StockTransaction: Logs changes to an inventory item's quantity.
+"""
+
 from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator, RegexValidator
 from students.models import Student
 from courses.models import Course, Batch, Trainer
 from simple_history.models import HistoricalRecords
+from django.db.models import Sum
 
 
 class FeesReceipt(models.Model):
+    """
+    Represents a single fee payment received from a student.
+    """
     MODE_CHOICES = [
         ("cash", "Cash"),
         ("upi", "UPI"),
@@ -22,11 +37,13 @@ class FeesReceipt(models.Model):
     amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     mode = models.CharField(max_length=20, choices=MODE_CHOICES)
     txn_id = models.CharField(max_length=50, blank=True)
-    date = models.DateField(auto_now_add=True)  # keep existing behavior for compatibility
+    date = models.DateField(auto_now_add=True)
     posted_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    
+    # 'locked' prevents editing or deletion via the admin or API
     locked = models.BooleanField(default=False)
     
-    # --- ADD THIS NEW FIELD ---
+    # Stores the auto-generated PDF receipt
     pdf_file = models.FileField(upload_to="finance/receipts/", blank=True, null=True)
     
     history = HistoricalRecords()
@@ -47,15 +64,18 @@ class FeesReceipt(models.Model):
 
     @property
     def is_editable(self) -> bool:
-        """Receipts marked locked are immutable."""
+        """Helper property to check if the receipt is mutable."""
         return not self.locked
 
-# ... (rest of finance/models.py is unchanged) ...
+
 class Expense(models.Model):
+    """
+    Represents an operational expense (e.g., materials, maintenance, salary).
+    """
     CATEGORY_CHOICES = [
         ("material", "Material"),
         ("maintenance", "Maintenance"),
-        ("salary", "Salary"),
+        ("salary", "Salary"), # Note: 'Payroll' model is preferred for trainer salaries
         ("other", "Other"),
     ]
 
@@ -76,10 +96,13 @@ class Expense(models.Model):
         verbose_name_plural = "Expenses"
 
     def __str__(self):
-        return f"{self.category} - {self.amount}"
+        return f"{self.get_category_display()} - {self.amount}"
 
 
 class Payroll(models.Model):
+    """
+    Represents a salary payment record for a Trainer for a specific month.
+    """
     month = models.CharField(
         max_length=7,  # "YYYY-MM"
         validators=[RegexValidator(r"^\d{4}-(0[1-9]|1[0-2])$", "Month must be in YYYY-MM format.")],
@@ -94,6 +117,7 @@ class Payroll(models.Model):
     history = HistoricalRecords()
 
     class Meta:
+        # Ensures one payroll record per trainer per month
         unique_together = ("trainer", "month")
         ordering = ["-month", "-id"]
         indexes = [
@@ -105,25 +129,27 @@ class Payroll(models.Model):
         verbose_name_plural = "Payroll"
 
     def __str__(self):
-        return f"{self.trainer} - {self.month}"
+        return f"Payroll for {self.trainer} - {self.month}"
 
-
-# -------------------
-# REMINDERS
-# -------------------
 
 class Reminder(models.Model):
+    """
+    Logs a fee reminder sent to a student.
+    Can be created manually or by an automated job.
+    """
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("sent", "Sent"),
+        ("failed", "Failed"),
+    ]
+    
     student = models.ForeignKey(Student, on_delete=models.CASCADE)
     course = models.ForeignKey(Course, on_delete=models.SET_NULL, null=True, blank=True)
     batch = models.ForeignKey(Batch, on_delete=models.SET_NULL, null=True, blank=True)
     message = models.TextField()
     sent_at = models.DateTimeField(auto_now_add=True)
     sent_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
-    status = models.CharField(
-        max_length=20,
-        choices=[("pending", "Pending"), ("sent", "Sent"), ("failed", "Failed")],
-        default="pending"
-    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
 
     class Meta:
         ordering = ["-sent_at"]
@@ -134,7 +160,6 @@ class Reminder(models.Model):
         return f"Reminder to {self.student} ({self.status})"
 
 
-
 class StockItem(models.Model):
     """
     Represents an item in the inventory, like fabric, thread, buttons.
@@ -143,8 +168,12 @@ class StockItem(models.Model):
     description = models.TextField(blank=True)
     unit_of_measure = models.CharField(max_length=20, help_text="e.g., 'meters', 'pieces', 'kg'")
     quantity_on_hand = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    reorder_level = models.DecimalField(max_digits=10, decimal_places=2, default=0,
-                                        help_text="Quantity at which to re-order")
+    reorder_level = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Quantity at which to re-order"
+    )
     
     class Meta:
         ordering = ["name"]
@@ -155,19 +184,35 @@ class StockItem(models.Model):
         return f"{self.name} ({self.quantity_on_hand} {self.unit_of_measure})"
     
     @property
-    def needs_reorder(self):
+    def needs_reorder(self) -> bool:
+        """Returns True if quantity is at or below reorder level."""
         return self.quantity_on_hand <= self.reorder_level
+
 
 class StockTransaction(models.Model):
     """
     Logs every change in stock quantity (e.g., purchase, usage, wastage).
+    This model automatically updates the parent StockItem's quantity_on_hand
+    via its save() and delete() methods.
     """
     item = models.ForeignKey(StockItem, on_delete=models.CASCADE, related_name="transactions")
     date = models.DateTimeField(auto_now_add=True)
-    quantity_changed = models.DecimalField(max_digits=10, decimal_places=2, 
-                                           help_text="Positive for adding stock (e.g., purchase), negative for removing (e.g., usage)")
-    reason = models.CharField(max_length=255, blank=True, help_text="e.g., 'Purchase Order 123', 'Used for Batch BT-01', 'Wastage'")
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    quantity_changed = models.DecimalField(
+        max_digits=10,
+        decimal_places=2, 
+        help_text="Positive for adding stock (e.g., purchase), negative for removing (e.g., usage)"
+    )
+    reason = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="e.g., 'Purchase Order 123', 'Used for Batch BT-01', 'Wastage'"
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
 
     class Meta:
         ordering = ["-date"]
@@ -179,17 +224,22 @@ class StockTransaction(models.Model):
 
     def save(self, *args, **kwargs):
         """
-        Automatically update the StockItem's quantity_on_hand.
+        Automatically update the StockItem's quantity_on_hand on create.
         """
-        # On create, update the parent item's stock level
-        if not self.pk:
+        is_new = self._state.adding
+        super().save(*args, **kwargs) # Save transaction first
+        
+        if is_new:
+            # On create, update the parent item's stock level
             self.item.quantity_on_hand = (self.item.quantity_on_hand or 0) + self.quantity_changed
             self.item.save(update_fields=["quantity_on_hand"])
-        super().save(*args, **kwargs)
+        # Note: Handling updates to quantity_changed is complex and generally
+        # disallowed. A change should be a new, correcting transaction.
 
     def delete(self, *args, **kwargs):
         """
-        On delete, reverse the quantity change (e.g., if a transaction was a mistake).
+        On delete, reverse the quantity change from the parent item.
+        (e.g., if a transaction was a mistake).
         """
         self.item.quantity_on_hand = (self.item.quantity_on_hand or 0) - self.quantity_changed
         self.item.save(update_fields=["quantity_on_hand"])

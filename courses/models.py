@@ -1,14 +1,13 @@
 """
-Courses App Models
-------------------
-Handles Course, Trainer, Batch, and Enrollment relationships.
+Data models for the 'courses' app.
 
-Improvements:
-- Added docstrings, verbose names, and indexes for performance.
-- Added validation-ready fields (positive values, constraints).
-- Defined Meta options for ordering.
-- Ensured referential integrity on all ForeignKeys.
-- NEW: Added CourseMaterial model.
+This file defines the core entities related to the institute's curriculum:
+- Course: The curriculum itself (e.g., "3 Month Diploma").
+- Trainer: An instructor linked to a User account.
+- Batch: A specific instance of a Course, taught by a Trainer.
+- Enrollment: A link between a Student and a Batch.
+- BatchFeedback: A student's review of their enrollment.
+- CourseMaterial: Files and links associated with a Course.
 """
 
 from django.db import models
@@ -16,18 +15,21 @@ from django.conf import settings
 from django.core.validators import MinValueValidator, MaxValueValidator
 from students.models import Student
 from django.utils import timezone
-from datetime import timedelta
 from django.db.models import Q, Count
 
 
 class Course(models.Model):
-    """Represents a course offered at the institute."""
+    """
+    Represents a distinct course or program offered by the institute.
+    """
     code = models.CharField(max_length=20, unique=True)
     title = models.CharField(max_length=100)
     duration_weeks = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     total_fees = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     syllabus = models.TextField(blank=True)
     active = models.BooleanField(default=True)
+    
+    # Defines the number of 'Present' days required to mark the course 'completed'
     required_attendance_days = models.PositiveIntegerField(
         default=36, 
         help_text="Total 'Present' days required to complete"
@@ -48,8 +50,8 @@ class Course(models.Model):
 
 class Trainer(models.Model):
     """
-    Represents a trainer/instructor linked to a user account.
-    Trainers are staff-level users with additional employment info.
+    Represents a trainer/instructor.
+    Linked one-to-one with a staff-level User account.
     """
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     emp_no = models.CharField(max_length=20, unique=True)
@@ -72,8 +74,8 @@ class Trainer(models.Model):
 
 class Batch(models.Model):
     """
-    Represents a training "group" or "session" for a specific course.
-    Students can be enrolled in this group at any time.
+    Represents a specific session or group for a Course,
+    taught by a Trainer.
     """
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="batches")
     trainer = models.ForeignKey(Trainer, on_delete=models.SET_NULL, null=True, blank=True)
@@ -93,14 +95,15 @@ class Batch(models.Model):
         return f"{self.course.title} - {self.code}"
 
     def is_full(self):
-        """Returns True if batch capacity is reached."""
+        """Checks if the number of active enrollments has reached capacity."""
+        # Note: You might want to filter this by active enrollments
         return self.enrollments.count() >= self.capacity
 
 
 class Enrollment(models.Model):
     """
-    Represents a student's enrollment in a batch.
-    Stores the individual student's start and completion date.
+    Associates a Student with a Batch, tracking their status
+    (active, completed, dropped).
     """
     STATUS_CHOICES = [
         ("active", "Active"),
@@ -125,16 +128,12 @@ class Enrollment(models.Model):
 
     def __str__(self):
         return f"{self.student.user.get_full_name()} → {self.batch.code}"
-
-    def save(self, *args, **kwargs):
-        """
-        REMOVED: Automatic calculation of completion_date.
-        This is now handled by checking attendance count.
-        """
-        super().save(*args, **kwargs) # Call the "real" save method.
     
     def get_present_days_count(self):
-        """Counts all 'Present' attendance entries for this student in this course."""
+        """
+        Counts all 'Present' attendance entries for this student
+        for the *entire course*, not just this specific batch.
+        """
         return self.student.attendanceentry_set.filter(
             attendance__batch__course=self.batch.course,
             status="P"
@@ -142,8 +141,10 @@ class Enrollment(models.Model):
     
     def check_and_update_status(self):
         """
-        Checks attendance count against course requirement and updates
-        status to 'completed' if met.
+        Checks if the student's attendance meets the course requirement.
+        If it does, the enrollment is marked as 'completed'.
+        
+        This logic is triggered from the AttendanceSerializer.
         """
         if self.status == "active": # Only check active enrollments
             present_count = self.get_present_days_count()
@@ -151,14 +152,15 @@ class Enrollment(models.Model):
             
             if present_count >= required_count:
                 self.status = "completed"
-                self.completion_date = timezone.now().date() # Set completion date to today
+                self.completion_date = timezone.now().date() # Set completion to today
                 self.save(update_fields=["status", "completion_date"])
+                # (Future enhancement: trigger certificate creation signal)
 
 
 class BatchFeedback(models.Model):
     """
-    Stores feedback (rating and comments) from a student
-    about a batch they were enrolled in.
+    Stores a student's feedback (rating/comments) for a specific
+    enrollment, linked One-to-One.
     """
     enrollment = models.OneToOneField(Enrollment, on_delete=models.CASCADE, related_name="feedback")
     rating = models.PositiveIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
@@ -174,10 +176,10 @@ class BatchFeedback(models.Model):
         return f"Feedback for {self.enrollment.batch.code} by {self.enrollment.student.user.get_full_name()}"
 
 
-# --- NEW MODEL ---
 class CourseMaterial(models.Model):
     """
-    Represents a resource (file or link) associated with a course.
+    Represents a resource (file or link) associated with a Course.
+    Students enrolled in the course can access these materials.
     """
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name="materials")
     title = models.CharField(max_length=200)
@@ -195,7 +197,10 @@ class CourseMaterial(models.Model):
         return f"{self.title} ({self.course.code})"
 
     def clean(self):
-        # Ensure either a file or a link is provided, but not both.
+        """
+        Model-level validation to ensure either a file or a link is
+        provided, but not both.
+        """
         if not self.file and not self.link:
             raise models.ValidationError("Must provide either a file or a link.")
         if self.file and self.link:

@@ -1,12 +1,7 @@
 """
-Students App Models
--------------------
-Handles student registrations and enquiries.
-
-Enhancements:
-- Added verbose names, ordering, and indexes for faster lookups.
-- Added optional auto reg_no generator helper.
-- Ensured timezone-safe default for admission_date.
+Data models for the 'students' app.
+Handles student pre-admission enquiries and registered student profiles,
+including their measurements.
 """
 
 from django.db import models
@@ -14,7 +9,6 @@ from django.utils import timezone
 from django.conf import settings
 from django.core.validators import RegexValidator
 from simple_history.models import HistoricalRecords
-
 
 class Enquiry(models.Model):
     """Represents a new student enquiry (pre-admission)."""
@@ -54,7 +48,7 @@ class Enquiry(models.Model):
 class Student(models.Model):
     """
     Represents a registered student.
-    One-to-one with User for account access.
+    Linked one-to-one with a User account for authentication.
     """
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     reg_no = models.CharField(max_length=30, unique=True)
@@ -78,10 +72,15 @@ class Student(models.Model):
     def __str__(self) -> str:
         return f"{self.user.get_full_name()} ({self.reg_no})"
 
-    # Example: helper to auto-generate reg_no
     @staticmethod
     def generate_reg_no() -> str:
-        """Generates a simple registration number like STU2025-001."""
+        """
+        Generates a simple sequential registration number.
+        Example: STU2025-001
+        """
+        # Note: This has a potential race condition in high-concurrency.
+        # For more robust generation, consider using a separate sequence
+        # or a database-level function.
         count = Student.objects.count() + 1
         year = timezone.now().year
         return f"STU{year}-{count:03d}"
@@ -90,11 +89,12 @@ class Student(models.Model):
 class StudentMeasurement(models.Model):
     """
     Stores body measurements for a student, taken on a specific date.
+    A student can have multiple measurement records over time.
     """
     student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name="measurements")
     date_taken = models.DateField(default=timezone.localdate)
     
-    # Example measurements (add as many as you need)
+    # Example measurements
     neck = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     chest = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     waist = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)

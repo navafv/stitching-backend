@@ -25,6 +25,7 @@ class AttendanceAdmin(admin.ModelAdmin):
     search_fields = ("batch__code", "remarks")
     inlines = [AttendanceEntryInline]
     ordering = ("-date",)
+    autocomplete_fields = ['batch', 'taken_by']
     
     @admin.display(description="Total Students")
     def get_total_students(self, obj):

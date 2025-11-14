@@ -1,7 +1,7 @@
 """
 Views for the 'accounts' app.
 
-Provides API endpoints for managing users, roles, and authentication
+Provides API endpoints for managing Users, Roles, and authentication
 processes like password changes and resets.
 """
 
@@ -31,7 +31,10 @@ logger = logging.getLogger(__name__)
 
 
 class RoleViewSet(viewsets.ModelViewSet):
-    """API endpoint for Role management (Admin only)."""
+    """
+    API endpoint for Role management.
+    (Admin access only)
+    """
     queryset = Role.objects.all().order_by("name")
     serializer_class = RoleSerializer
     permission_classes = [IsAdmin]
@@ -44,8 +47,8 @@ class RoleViewSet(viewsets.ModelViewSet):
 class UserViewSet(viewsets.ModelViewSet):
     """
     API endpoint for User management.
-    - Admins can manage all users.
-    - Authenticated users can view/update their own profile via `/api/v1/users/me/`.
+    - Admins can manage all users (full CRUD).
+    - Authenticated users can view/update their *own* profile via `/api/v1/users/me/`.
     """
     queryset = User.objects.select_related("role").order_by('username')
     filterset_fields = ["is_active", "role"]
@@ -54,7 +57,10 @@ class UserViewSet(viewsets.ModelViewSet):
     authentication_classes = [JWTAuthentication]
 
     def get_permissions(self):
-        """Assign permissions based on the action."""
+        """
+        - 'me' and 'set_password' actions are available to any authenticated user.
+        - All other actions (list, create, retrieve, update, delete) are Admin-only.
+        """
         if self.action in ["me", "set_password"]:
             return [IsAuthenticated()]
         return [IsAdmin()]
@@ -65,18 +71,21 @@ class UserViewSet(viewsets.ModelViewSet):
             return UserCreateSerializer
         if self.action == "set_password":
             return PasswordChangeSerializer
-        return UserSerializer
+        return UserSerializer # Default for list, retrieve, update
 
     @action(detail=False, methods=["get", "patch", "put"], permission_classes=[IsAuthenticated])
     def me(self, request):
-        """Retrieve or update the profile for the authenticated user."""
+        """
+        Retrieve (GET) or update (PATCH/PUT) the profile for the
+        currently authenticated user.
+        """
         user = request.user
         if request.method == 'GET':
             serializer = self.get_serializer(user)
             return Response(serializer.data, status=status.HTTP_200_OK)
         
         # Handle PUT/PATCH for profile updates
-        serializer = self.get_serializer(user, data=request.data, partial=request.method == 'PATCH')
+        serializer = self.get_serializer(user, data=request.data, partial=(request.method == 'PATCH'))
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -85,7 +94,10 @@ class UserViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=["post"], url_path="me/set-password")
     def set_password(self, request):
-        """Allows the authenticated user to change their own password."""
+        """
+        Allows the authenticated user to change their own password.
+        Requires 'old_password' and 'new_password'.
+        """
         serializer = self.get_serializer(data=request.data, context={'request': request})
         if serializer.is_valid():
             serializer.save()
@@ -94,7 +106,10 @@ class UserViewSet(viewsets.ModelViewSet):
     
 
 class HistoricalUserViewSet(viewsets.ReadOnlyModelViewSet):
-    """Read-only endpoint for viewing User change history (Admin only)."""
+    """
+    Read-only endpoint for viewing User change history.
+    (Admin access only)
+    """
     queryset = User.history.select_related("history_user").all()
     serializer_class = HistoricalUserSerializer
     permission_classes = [IsAdmin]
@@ -106,6 +121,8 @@ class HistoricalUserViewSet(viewsets.ReadOnlyModelViewSet):
 class ForgotPasswordView(generics.GenericAPIView):
     """
     Public endpoint to request a password reset email.
+    Accepts an 'email' field. If the user exists and is active,
+    sends an email with a unique reset link.
     """
     permission_classes = [AllowAny]
     serializer_class = PasswordResetRequestSerializer
@@ -116,9 +133,11 @@ class ForgotPasswordView(generics.GenericAPIView):
         
         user = User.objects.get(email__iexact=serializer.validated_data['email'], is_active=True)
         
+        # Generate token and user ID
         token = PasswordResetTokenGenerator().make_token(user)
         uidb64 = urlsafe_base64_encode(force_bytes(user.pk))
         
+        # Build the reset link
         # Assumes the first configured origin is the frontend URL
         frontend_url = settings.CORS_ALLOWED_ORIGINS[0] 
         reset_link = f"{frontend_url}/reset-password/{uidb64}/{token}/"
@@ -139,6 +158,7 @@ class ForgotPasswordView(generics.GenericAPIView):
                 from_email=settings.DEFAULT_FROM_EMAIL,
                 recipient_list=[user.email],
             )
+            logger.info(f"Password reset email sent to {user.email}")
         except Exception as e:
             logger.error(f"Failed to send password reset email to {user.email}: {e}")
             return Response(
@@ -155,6 +175,7 @@ class ForgotPasswordView(generics.GenericAPIView):
 class ResetPasswordView(generics.GenericAPIView):
     """
     Public endpoint to confirm and set a new password using a token.
+    Accepts 'uidb64', 'token', and 'new_password'.
     """
     permission_classes = [AllowAny]
     serializer_class = SetNewPasswordSerializer
@@ -162,7 +183,7 @@ class ResetPasswordView(generics.GenericAPIView):
     def post(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
+        serializer.save() # This performs the password reset
         
         return Response(
             {"detail": "Password has been reset successfully. You can now log in."},
