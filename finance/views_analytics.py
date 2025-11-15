@@ -14,6 +14,7 @@ from rest_framework.permissions import IsAuthenticated
 from .models import FeesReceipt, Expense, Payroll
 from courses.models import Course, Trainer, Enrollment
 from api.permissions import IsAdmin # Use a strict permission
+from students.models import Student, Enquiry
 
 class FinanceAnalyticsViewSet(viewsets.ViewSet):
     """
@@ -36,10 +37,20 @@ class FinanceAnalyticsViewSet(viewsets.ViewSet):
         total_combined_expense = float(total_expense + total_payroll)
         total_income = float(total_income)
 
+        total_active_students = Student.objects.filter(
+            enrollments__status="active"
+        ).distinct().count()
+        
+        new_pending_enquiries = Enquiry.objects.filter(
+            status="pending"
+        ).count()
+
         data = {
             "total_income": total_income,
             "total_expense": total_combined_expense,
             "net_profit": round(total_income - total_combined_expense, 2),
+            "total_active_students": total_active_students,
+            "new_pending_enquiries": new_pending_enquiries,
         }
         return Response(data)
 
